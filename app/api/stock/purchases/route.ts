@@ -1,0 +1,549 @@
+import { NextResponse } from "next/server";
+
+import { prisma } from "@/lib/prisma";
+
+import { requireAdmin } from "@/lib/auth";
+
+import { createCentralBatch } from "@/lib/fifo";
+
+type Item = {
+
+  productId: string;
+
+  quantity: number;
+
+  unitCost: number;
+
+};
+
+async function ensureCostCategory({
+
+  companyId,
+
+  name,
+
+  description,
+
+}: {
+
+  companyId: string;
+
+  name: string;
+
+  description: string;
+
+}) {
+
+  const existing = await prisma.costCategory.findFirst({
+
+    where: {
+
+      companyId,
+
+      name,
+
+    },
+
+  });
+
+  if (existing) return existing;
+
+  return prisma.costCategory.create({
+
+    data: {
+
+      companyId,
+
+      name,
+
+      description,
+
+      isSystem: true,
+
+      costType: "ONE_TIME",
+
+      periodicity: "NONE",
+
+      defaultAmount: null,
+
+    },
+
+  });
+
+}
+
+export async function POST(request: Request) {
+
+  try {
+
+    const session = await requireAdmin();
+
+    const body = await request.json();
+
+    const {
+
+      supplierId,
+
+      invoiceNumber,
+
+      transportCost,
+
+      otherCosts,
+
+      notes,
+
+      items,
+
+    }: {
+
+      supplierId?: string;
+
+      invoiceNumber?: string;
+
+      transportCost?: number | string;
+
+      otherCosts?: number | string;
+
+      notes?: string;
+
+      items: Item[];
+
+    } = body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+
+      return NextResponse.json(
+
+        { message: "Adicione pelo menos um produto à compra." },
+
+        { status: 400 }
+
+      );
+
+    }
+
+    const cleanItems = items.map((item) => ({
+
+      productId: item.productId,
+
+      quantity: Number(item.quantity || 0),
+
+      unitCost: Number(item.unitCost || 0),
+
+    }));
+
+    const invalidItem = cleanItems.find(
+
+      (item) => !item.productId || item.quantity <= 0 || item.unitCost < 0
+
+    );
+
+    if (invalidItem) {
+
+      return NextResponse.json(
+
+        { message: "Existe um produto inválido na compra." },
+
+        { status: 400 }
+
+      );
+
+    }
+
+    if (supplierId) {
+
+      const supplier = await prisma.supplier.findFirst({
+
+        where: {
+
+          id: supplierId,
+
+          companyId: session.companyId,
+
+          status: "ACTIVE",
+
+        },
+
+      });
+
+      if (!supplier) {
+
+        return NextResponse.json(
+
+          { message: "Fornecedor inválido ou inativo." },
+
+          { status: 400 }
+
+        );
+
+      }
+
+    }
+
+    for (const item of cleanItems) {
+
+      const product = await prisma.product.findFirst({
+
+        where: {
+
+          id: item.productId,
+
+          companyId: session.companyId,
+
+          status: "ACTIVE",
+
+        },
+
+      });
+
+      if (!product) {
+
+        return NextResponse.json(
+
+          { message: "Um dos produtos é inválido ou está inativo." },
+
+          { status: 400 }
+
+        );
+
+      }
+
+    }
+
+    const transport = Number(transportCost || 0);
+
+    const others = Number(otherCosts || 0);
+
+    const subtotal = cleanItems.reduce(
+
+      (sum, item) => sum + item.quantity * item.unitCost,
+
+      0
+
+    );
+
+    const totalAmount = subtotal + transport + others;
+
+    const purchaseNumber = `COMP-${Date.now()}`;
+
+    const transportCategory =
+
+      transport > 0
+
+        ? await ensureCostCategory({
+
+            companyId: session.companyId,
+
+            name: "Transporte de compra",
+
+            description: "Custos de transporte associados às compras.",
+
+          })
+
+        : null;
+
+    const otherPurchaseCategory =
+
+      others > 0
+
+        ? await ensureCostCategory({
+
+            companyId: session.companyId,
+
+            name: "Outros custos de compra",
+
+            description: "Outros custos associados às compras.",
+
+          })
+
+        : null;
+
+    const purchase = await prisma.$transaction(async (tx) => {
+
+      const createdPurchase = await tx.purchase.create({
+
+        data: {
+
+          companyId: session.companyId,
+
+          supplierId: supplierId || null,
+
+          purchaseNumber,
+
+          invoiceNumber: invoiceNumber || null,
+
+          subtotal,
+
+          transportCost: transport,
+
+          otherCosts: others,
+
+          totalAmount,
+
+          status: "RECEIVED",
+
+          notes: notes || null,
+
+        },
+
+      });
+
+      for (const item of cleanItems) {
+
+        const totalCost = item.quantity * item.unitCost;
+
+        const purchaseItem = await tx.purchaseItem.create({
+
+          data: {
+
+            purchaseId: createdPurchase.id,
+
+            productId: item.productId,
+
+            quantity: item.quantity,
+
+            unitCost: item.unitCost,
+
+            totalCost,
+
+          },
+
+        });
+
+        await createCentralBatch({
+
+          tx,
+
+          companyId: session.companyId,
+
+          productId: item.productId,
+
+          quantity: item.quantity,
+
+          unitCost: item.unitCost,
+
+          sourceType: "PURCHASE",
+
+          sourceId: createdPurchase.id,
+
+          purchaseItemId: purchaseItem.id,
+
+        });
+
+        const currentStock = await tx.centralStock.findUnique({
+
+          where: { productId: item.productId },
+
+        });
+
+        if (currentStock) {
+
+          const oldQty = currentStock.quantity;
+
+          const oldAvg = Number(currentStock.avgCost || 0);
+
+          const newQty = oldQty + item.quantity;
+
+          const newAvgCost =
+
+            newQty > 0
+
+              ? (oldQty * oldAvg + item.quantity * item.unitCost) / newQty
+
+              : item.unitCost;
+
+          await tx.centralStock.update({
+
+            where: { productId: item.productId },
+
+            data: {
+
+              quantity: newQty,
+
+              avgCost: newAvgCost,
+
+            },
+
+          });
+
+        } else {
+
+          await tx.centralStock.create({
+
+            data: {
+
+              companyId: session.companyId,
+
+              productId: item.productId,
+
+              quantity: item.quantity,
+
+              avgCost: item.unitCost,
+
+            },
+
+          });
+
+        }
+
+        await tx.product.update({
+
+          where: { id: item.productId },
+
+          data: {
+
+            purchasePrice: item.unitCost,
+
+          },
+
+        });
+
+        await tx.stockMovement.create({
+
+          data: {
+
+            companyId: session.companyId,
+
+            productId: item.productId,
+
+            userId: session.userId,
+
+            cantinaId: null,
+
+            type: "PURCHASE_IN",
+
+            quantity: item.quantity,
+
+            referenceId: createdPurchase.id,
+
+            reason: "Compra a fornecedor com lote FIFO",
+
+          },
+
+        });
+
+      }
+
+      if (transport > 0 && transportCategory) {
+
+        await tx.cost.create({
+
+          data: {
+
+            companyId: session.companyId,
+
+            categoryId: transportCategory.id,
+
+            cantinaId: null,
+
+            description: `Transporte da compra ${purchaseNumber}`,
+
+            amount: transport,
+
+            costDate: new Date(),
+
+            isAutomatic: true,
+
+            paymentStatus: "PAID",
+
+            paidAt: new Date(),
+
+            referencePeriod: purchaseNumber,
+
+          },
+
+        });
+
+      }
+
+      if (others > 0 && otherPurchaseCategory) {
+
+        await tx.cost.create({
+
+          data: {
+
+            companyId: session.companyId,
+
+            categoryId: otherPurchaseCategory.id,
+
+            cantinaId: null,
+
+            description: `Outros custos da compra ${purchaseNumber}`,
+
+            amount: others,
+
+            costDate: new Date(),
+
+            isAutomatic: true,
+
+            paymentStatus: "PAID",
+
+            paidAt: new Date(),
+
+            referencePeriod: purchaseNumber,
+
+          },
+
+        });
+
+      }
+
+      await tx.financeTransaction.create({
+
+        data: {
+
+          companyId: session.companyId,
+
+          userId: session.userId,
+
+          type: "EXPENSE",
+
+          amount: totalAmount,
+
+          description: `Compra ${purchaseNumber}`,
+
+          referenceType: "PURCHASE",
+
+          referenceId: createdPurchase.id,
+
+        },
+
+      });
+
+      return createdPurchase;
+
+    });
+
+    return NextResponse.json({
+
+      message: "Compra registada com sucesso com FIFO e custos associados.",
+
+      purchase,
+
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return NextResponse.json(
+
+      {
+
+        message:
+
+          error instanceof Error
+
+            ? error.message
+
+            : "Erro ao registar compra.",
+
+      },
+
+      { status: 500 }
+
+    );
+
+  }
+
+}

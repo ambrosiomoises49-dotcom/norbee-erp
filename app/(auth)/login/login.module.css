@@ -1,0 +1,268 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+.loginPage,
+.loginPage * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+}
+
+.loginPage {
+  background: url("/logo_norbee1.png");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.loginSection {
+  transform: translateX(180px);
+  background-color: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  padding: 30px;
+  width: 420px;
+  border-radius: 20px;
+  backdrop-filter: blur(30px);
+}
+
+.loginSection h1 {
+  font-size: 20px;
+  text-align: center;
+  color: white;
+  margin-bottom: 20px;
+}
+
+.inputBox {
+  width: 100%;
+  position: relative;
+  margin-bottom: 25px;
+  color:rgb(114, 113, 113);
+  background: transparent;
+}
+
+.inputBox input {
+  width: 100%;
+  padding: 15px;
+  border-radius: 25px;
+  outline: none;
+  background-color: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding-right: 40px;
+}
+
+.inputBox input::placeholder {
+  color: white;
+}
+
+.inputBox svg {
+  position: absolute;
+  transform: translateY(-50%);
+  right: 20px;
+  top: 50%;
+  color: white;
+}
+
+.remenberForgot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: white;
+  margin-bottom: 25px;
+  gap: 12px;
+}
+
+.remenberForgot label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.remenberForgot a,
+.registerLink a {
+  color: white;
+  text-decoration: none;
+  transition: 0.5s;
+  font-weight: bold;
+}
+
+.remenberForgot a:hover,
+.registerLink a:hover {
+  text-decoration: underline;
+}
+
+.loginBtn {
+  color: white;
+  width: 100%;
+  padding: 15px;
+  border-radius: 25px;
+  outline: none;
+  border: 0;
+  font-weight: bold;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: 0.5s;
+}
+
+.loginBtn:hover {
+  background-color: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.registerLink {
+  text-align: center;
+  margin-top: 25px;
+  color: white;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .loginSection {
+    transform: translateX(0);
+    width: 100%;
+    max-width: 420px;
+    
+  }
+
+  .remenberForgot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.redirectAnim {
+  animation: redirectFadeScale 0.5s ease forwards;
+}
+
+@keyframes redirectFadeScale {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    filter: blur(2px);
+  }
+}
+.inputBox select {
+  width: 100%;
+  padding: 15px;
+  border-radius: 25px;
+  outline: none;
+  background-color: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding-right: 40px;
+  appearance: none;
+}
+
+.inputBox select option {
+  color: #111;
+  background: white;
+}
+
+.countrySuggestions {
+  position: absolute;
+  z-index: 20;
+  top: 58px;
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: white;
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.countrySuggestions button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #111;
+  padding: 10px 12px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.countrySuggestions button:hover {
+  background: #f1f5f9;
+}
+
+.countrySuggestions strong {
+  font-size: 12px;
+  color: #0a3a66;
+}
+
+.selectedCountryBox {
+  width: 100%;
+  min-height: 54px;
+  border-radius: 25px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+.selectedCountryBox span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.selectedCountryBox strong {
+  font-size: 13px;
+}
+.flagIcon {
+  width: 22px;
+  height: 15px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.currencyBox {
+  width: 100%;
+  min-height: 54px;
+  border-radius: 25px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+.currencyBox span {
+  font-size: 14px;
+}
+
+.currencyBox strong {
+  font-size: 15px;
+}
+.selectedFlag {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}

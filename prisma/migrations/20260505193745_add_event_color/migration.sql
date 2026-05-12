@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Event" ADD COLUMN     "color" TEXT NOT NULL DEFAULT '#123A5C';

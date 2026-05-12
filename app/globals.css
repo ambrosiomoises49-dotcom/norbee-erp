@@ -24,3 +24,18 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+@keyframes cantinaMove {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(35%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.animate-cantinaMove {
+  animation: cantinaMove 3s ease-in-out infinite;
+}

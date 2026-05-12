@@ -1,0 +1,913 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+enum StockMovementType {
+  PURCHASE_IN
+  TRANSFER_OUT
+  TRANSFER_IN
+  SALE_OUT
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  LOSS
+  RETURN
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_MONEY
+  TRANSFER
+  OTHER
+}
+
+enum TransferStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PurchaseStatus {
+  PENDING
+  RECEIVED
+  CANCELLED
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
+
+enum SalaryPaymentStatus {
+  PENDING
+  PAID
+  DELAYED
+}
+
+enum FinanceType {
+  INCOME
+  EXPENSE
+}
+
+enum NotificationType {
+  priority
+  CALENDAR
+  AI
+  STOCK_LOW
+  PAYMENT_DUE
+  SALE_COMPLETED
+  TRANSFER_RECEIVED
+  SALARY_DUE
+  SYSTEM
+  OTHER
+  EVENT_REMINDER
+}
+
+enum FinancialAccountType {
+  CASH
+  BANK
+  MOBILE_MONEY
+  CARD
+  OTHER
+}
+
+enum CostPaymentStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum CostType {
+  ONE_TIME
+  RECURRING
+}
+
+enum CostPeriodicity {
+  NONE
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum EventPriority {
+  LOW
+
+  NORMAL
+
+  HIGH
+
+  URGENT
+}
+
+enum EventStatus {
+  PENDING
+
+  DONE
+
+  CANCELLED
+}
+
+enum EventType {
+  PURCHASE
+
+  SALARY
+
+  TRANSFER
+
+  COST
+
+  MEETING
+
+  MAINTENANCE
+
+  OTHER
+}
+
+// ============================================
+// COMPANY (tenant principal - multi-país/moeda)
+// ============================================
+
+model Company {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique // ex: "millenor" → usado em admin@millenor
+
+  // Recuperação de conta (sem email clássico no login)
+  recoveryEmail String
+  recoveryPhone String?
+
+  // Internacionalização
+  country  String // ISO: "AO", "MZ", "PT", "BR"
+  currency String // ISO: "AOA", "MZN", "EUR", "BRL"
+  language String @default("pt") // "pt", "fr", "en"
+
+  // Dados fiscais
+  taxId   String? // NIF / NUIT / CNPJ
+  address String?
+  logoUrl String?
+
+  status    Status   @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users             User[]
+  cantinas          Cantina[]
+  products          Product[]
+  categories        Category[]
+  costCategories    CostCategory[]
+  suppliers         Supplier[]
+  purchases         Purchase[]
+  centralStocks     CentralStock[]
+  cantinaStocks     CantinaStock[]
+  transfers         StockTransfer[]
+  stockMovements    StockMovement[]
+  sales             Sale[]
+  costs             Cost[]
+  employees         Employee[]
+  salaryPayments    SalaryPayment[]
+  finances          FinanceTransaction[]
+  notifications     Notification[]
+  financialAccounts FinancialAccount[]
+  stockBatches      StockBatch[]
+
+  stockBatchConsumptions StockBatchConsumption[]
+  events                 Event[]
+  ivoices                Invoice[]
+
+  @@index([slug])
+}
+
+// ============================================
+// USER (login: ADMIN ou EMPLOYEE/Cantina)
+// ============================================
+
+model User {
+  id        String  @id @default(cuid())
+  companyId String
+  cantinaId String? @unique // 1:1 — cada cantina tem 1 login
+
+  name         String
+  identifier   String @unique // ex: "admin@millenor", "cantina001@millenor"
+  passwordHash String
+  role         Role
+
+  status      Status    @default(ACTIVE)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cantina Cantina? @relation(fields: [cantinaId], references: [id], onDelete: SetNull)
+
+  salesCreated     Sale[]
+  stockMovements   StockMovement[]
+  financeCreated   FinanceTransaction[]
+  transfersCreated StockTransfer[]      @relation("TransferResponsible")
+  notifications    Notification[]
+
+  @@index([companyId])
+  @@index([identifier])
+}
+
+// ============================================
+// CANTINA (ponto de venda)
+// ============================================
+
+model Cantina {
+  id        String @id @default(cuid())
+  companyId String
+
+  code              String // identificador interno
+  name              String
+  location          String?
+  openingDate       DateTime?
+  openingCash       Decimal   @default(0) @db.Decimal(15, 2)
+  availableMachines String?
+
+  status    Status   @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  user          User? // 1:1 — conta de login da cantina
+  cantinaStocks CantinaStock[]
+  sales         Sale[]
+  costs         Cost[]
+  employees     Employee[]
+  transfersIn   StockTransfer[] @relation("DestinationCantina")
+  stockBatches  StockBatch[]
+  events        Event[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+}
+
+// ============================================
+// CATEGORY (produtos - personalizável por empresa)
+// ============================================
+
+model Category {
+  id        String @id @default(cuid())
+  companyId String
+
+  name      String
+  code      String?
+  createdAt DateTime @default(now())
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// ============================================
+// COST CATEGORY (personalizável por empresa)
+// ============================================
+
+model CostCategory {
+  id        String @id @default(cuid())
+  companyId String
+
+  name        String // ex: "Renda", "Energia", "Salários"
+  description String?
+  isSystem    Boolean  @default(false) // categorias criadas automaticamente
+  createdAt   DateTime @default(now())
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  costs    Cost[]
+  costType CostType @default(ONE_TIME)
+
+  periodicity CostPeriodicity @default(NONE)
+
+  defaultAmount Decimal? @db.Decimal(15, 2)
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// ============================================
+// SUPPLIER
+// ============================================
+
+model Supplier {
+  id        String @id @default(cuid())
+  companyId String
+
+  name    String
+  phone   String?
+  email   String?
+  address String?
+  taxId   String?
+  notes   String?
+
+  status    Status   @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  products  Product[]
+  purchases Purchase[]
+
+  @@index([companyId])
+}
+
+// ============================================
+// PRODUCT
+// ============================================
+
+model Product {
+  id         String  @id @default(cuid())
+  companyId  String
+  categoryId String?
+  supplierId String?
+
+  name         String
+  internalCode String
+  barcode      String?
+  unit         String  @default("UN") // UN, KG, L, etc.
+
+  purchasePrice Decimal @default(0) @db.Decimal(15, 2) // último preço de compra
+  salePrice     Decimal @default(0) @db.Decimal(15, 2)
+  minStock      Int     @default(0)
+
+  imageUrl  String?
+  status    Status   @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  centralStock   CentralStock?
+  cantinaStocks  CantinaStock[]
+  purchaseItems  PurchaseItem[]
+  transferItems  StockTransferItem[]
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+  stockBatches   StockBatch[]
+
+  @@unique([companyId, internalCode])
+  @@index([companyId])
+  @@index([barcode])
+}
+
+// ============================================
+// CENTRAL STOCK (armazém principal da empresa)
+// ============================================
+
+model CentralStock {
+  id        String @id @default(cuid())
+  companyId String
+  productId String @unique
+
+  quantity  Int      @default(0)
+  avgCost   Decimal  @default(0) @db.Decimal(15, 2) // custo médio (referência)
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+// ============================================
+// CANTINA STOCK (stock por cantina)
+// ============================================
+
+model CantinaStock {
+  id        String @id @default(cuid())
+  companyId String
+  cantinaId String
+  productId String
+
+  quantity  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cantina Cantina @relation(fields: [cantinaId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cantinaId, productId])
+  @@index([companyId])
+  @@index([cantinaId])
+}
+
+// ============================================
+// PURCHASE (compra a fornecedor)
+// ============================================
+
+model Purchase {
+  id         String  @id @default(cuid())
+  companyId  String
+  supplierId String?
+
+  purchaseNumber String
+  invoiceNumber  String? // nº fatura do fornecedor
+  purchaseDate   DateTime @default(now())
+
+  subtotal      Decimal @default(0) @db.Decimal(15, 2)
+  transportCost Decimal @default(0) @db.Decimal(15, 2)
+  otherCosts    Decimal @default(0) @db.Decimal(15, 2)
+  totalAmount   Decimal @default(0) @db.Decimal(15, 2)
+
+  status    PurchaseStatus @default(RECEIVED)
+  notes     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  items PurchaseItem[]
+
+  @@unique([companyId, purchaseNumber])
+  @@index([companyId])
+  @@index([purchaseDate])
+}
+
+model PurchaseItem {
+  id         String @id @default(cuid())
+  purchaseId String
+  productId  String
+
+  quantity  Int
+  unitCost  Decimal @db.Decimal(15, 2)
+  totalCost Decimal @db.Decimal(15, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+// ============================================
+// STOCK TRANSFER (central → cantina)
+// ============================================
+
+model StockTransfer {
+  id            String  @id @default(cuid())
+  companyId     String
+  destinationId String
+  responsibleId String?
+
+  transferNumber String
+  status         TransferStatus @default(COMPLETED)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  receivedAt     DateTime?
+
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  destination Cantina @relation("DestinationCantina", fields: [destinationId], references: [id], onDelete: Cascade)
+  responsible User?   @relation("TransferResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+
+  items StockTransferItem[]
+
+  @@unique([companyId, transferNumber])
+  @@index([companyId])
+  @@index([destinationId])
+}
+
+model StockTransferItem {
+  id         String @id @default(cuid())
+  transferId String
+  productId  String
+  quantity   Int
+
+  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product       @relation(fields: [productId], references: [id])
+
+  @@index([transferId])
+  @@index([productId])
+}
+
+// ============================================
+// STOCK MOVEMENT (histórico/auditoria)
+// ============================================
+
+model StockMovement {
+  id        String  @id @default(cuid())
+  companyId String
+  productId String
+  userId    String?
+  cantinaId String? // null = stock central
+
+  type        StockMovementType
+  quantity    Int
+  reason      String?
+  referenceId String? // id do documento de origem
+
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([productId])
+  @@index([createdAt])
+  @@index([cantinaId])
+}
+
+// ============================================
+// SALE (venda POS)
+// ============================================
+
+model Sale {
+  id        String  @id @default(cuid())
+  companyId String
+  cantinaId String
+  userId    String?
+
+  saleNumber String // sequencial (formato AGT ou local)
+
+  subtotal     Decimal @default(0) @db.Decimal(15, 2)
+  taxAmount    Decimal @default(0) @db.Decimal(15, 2)
+  totalAmount  Decimal @db.Decimal(15, 2)
+  paidAmount   Decimal @db.Decimal(15, 2)
+  changeAmount Decimal @default(0) @db.Decimal(15, 2)
+
+  paymentMethod PaymentMethod @default(CASH)
+  status        SaleStatus    @default(COMPLETED)
+
+  customerName  String?
+  customerTaxId String?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cantina Cantina @relation(fields: [cantinaId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  items SaleItem[]
+
+  ivoices Invoice?
+
+  @@unique([companyId, saleNumber])
+  @@index([companyId])
+  @@index([cantinaId])
+  @@index([createdAt])
+}
+
+model SaleItem {
+  id        String @id @default(cuid())
+  saleId    String
+  productId String
+
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(15, 2)
+  unitCost    Decimal @db.Decimal(15, 2) // snapshot do custo no momento da venda
+  totalPrice  Decimal @db.Decimal(15, 2)
+  grossProfit Decimal @db.Decimal(15, 2) // (unitPrice - unitCost) * quantity
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+// ============================================
+// COST (custos da empresa ou cantina)
+// ============================================
+
+model Cost {
+  id         String  @id @default(cuid())
+  companyId  String
+  cantinaId  String?
+  categoryId String
+
+  description String?
+  amount      Decimal  @db.Decimal(15, 2)
+  costDate    DateTime @default(now())
+  isAutomatic Boolean  @default(false) // true se gerado automaticamente
+
+  createdAt DateTime @default(now())
+
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cantina  Cantina?     @relation(fields: [cantinaId], references: [id], onDelete: SetNull)
+  category CostCategory @relation(fields: [categoryId], references: [id])
+
+  paymentStatus      CostPaymentStatus @default(PENDING)
+  paidAt             DateTime?
+  financialAccountId String?
+  financialAccount   FinancialAccount? @relation(fields: [financialAccountId], references: [id], onDelete: SetNull)
+
+  costType        CostType        @default(ONE_TIME)
+  periodicity     CostPeriodicity @default(NONE)
+  referencePeriod String?
+  dueDate         DateTime?
+
+  @@index([companyId])
+  @@index([cantinaId])
+  @@index([costDate])
+  @@index([paymentStatus])
+  @@index([financialAccountId])
+  @@index([costType])
+  @@index([periodicity])
+}
+
+// ============================================
+// EMPLOYEE (RH - funcionários reais, SEM login)
+// ============================================
+
+model Employee {
+  id        String  @id @default(cuid())
+  companyId String
+  cantinaId String?
+
+  fullName String
+  idNumber String? // BI / passaporte
+  phone    String?
+  email    String?
+  address  String?
+
+  role     String // função/cargo
+  salary   Decimal   @default(0) @db.Decimal(15, 2)
+  hireDate DateTime?
+
+  status    EmployeeStatus @default(ACTIVE)
+  notes     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cantina Cantina? @relation(fields: [cantinaId], references: [id], onDelete: SetNull)
+
+  salaryPayments SalaryPayment[]
+
+  @@index([companyId])
+  @@index([cantinaId])
+}
+
+// ============================================
+// SALARY PAYMENT
+// ============================================
+
+model SalaryPayment {
+  id         String @id @default(cuid())
+  companyId  String
+  employeeId String
+
+  amount         Decimal             @db.Decimal(15, 2)
+  paymentDate    DateTime            @default(now())
+  referenceMonth String // "2025-01"
+  paymentMethod  PaymentMethod       @default(CASH)
+  status         SalaryPaymentStatus @default(PAID)
+  notes          String?
+
+  createdAt DateTime @default(now())
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([referenceMonth])
+}
+
+// ============================================
+// FINANCE TRANSACTION (livro financeiro centralizado)
+// ============================================
+
+model FinanceTransaction {
+  id        String  @id @default(cuid())
+  companyId String
+  userId    String?
+
+  type        FinanceType
+  amount      Decimal     @db.Decimal(15, 2)
+  description String?
+  date        DateTime    @default(now())
+
+  referenceType String? // "SALE", "PURCHASE", "COST", "SALARY", "MANUAL"
+  referenceId   String? // id do documento de origem
+
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  financialAccountId String?
+  financialAccount   FinancialAccount? @relation(fields: [financialAccountId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([date])
+  @@index([type])
+  @@index([referenceType, referenceId])
+  @@index([financialAccountId])
+}
+
+// ============================================
+// NOTIFICATION (alertas/mensagens por utilizador)
+// ============================================
+
+model Notification {
+  id        String @id @default(cuid())
+  companyId String
+  userId    String // destinatário (identifier do user)
+
+  type    NotificationType
+  title   String
+  message String
+  link    String? // URL para redirecionar
+
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([isRead])
+}
+
+model FinancialAccount {
+  id        String @id @default(cuid())
+  companyId String
+
+  name      String
+  type      FinancialAccountType @default(CASH)
+  balance   Decimal              @default(0) @db.Decimal(15, 2)
+  currency  String?
+  isDefault Boolean              @default(false)
+  status    Status               @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transactions FinanceTransaction[]
+
+  costs Cost[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model StockBatch {
+  id String @id @default(cuid())
+
+  companyId String
+
+  productId String
+
+  purchaseItemId String?
+
+  transferItemId String?
+
+  cantinaId String? // null = stock central
+
+  initialQuantity Int
+
+  remainingQuantity Int
+
+  unitCost Decimal @db.Decimal(15, 2)
+
+  sourceType String // PURCHASE, TRANSFER_IN, ADJUSTMENT
+
+  sourceId String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  cantina Cantina? @relation(fields: [cantinaId], references: [id], onDelete: Cascade)
+
+  consumptions StockBatchConsumption[]
+
+  @@index([companyId])
+  @@index([productId])
+  @@index([cantinaId])
+  @@index([createdAt])
+}
+
+model StockBatchConsumption {
+  id String @id @default(cuid())
+
+  companyId String
+
+  batchId String
+
+  saleItemId String?
+
+  quantity Int
+
+  unitCost Decimal @db.Decimal(15, 2)
+
+  totalCost Decimal @db.Decimal(15, 2)
+
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  batch StockBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([batchId])
+  @@index([saleItemId])
+}
+
+model Event {
+  id String @id @default(cuid())
+
+  companyId String
+
+  cantinaId String?
+
+  title String
+
+  type EventType
+
+  description String?
+
+  eventDate DateTime
+
+  priority EventPriority @default(NORMAL)
+
+  status EventStatus @default(PENDING)
+
+  reminder24Sent Boolean @default(false)
+
+  reminder2Sent  Boolean @default(false)
+  reminder30Sent Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+  color     String   @default("#f9bbbb")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  cantina Cantina? @relation(fields: [cantinaId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([eventDate])
+  @@index([status])
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  companyId     String
+  saleId        String   @unique
+  invoiceNumber String   @unique
+  invoiceDate   DateTime @default(now())
+
+  customerName  String?
+  customerTaxId String?
+
+  subtotal       Decimal @default(0)
+  discountAmount Decimal @default(0)
+  totalAmount    Decimal @default(0)
+
+  paymentMethod String
+  status        String @default("ISSUED")
+
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([saleId])
+}
