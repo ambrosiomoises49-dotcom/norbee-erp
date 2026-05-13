@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { Cantina, Event } from "@prisma/client";
+
 
 export const runtime = "nodejs";
-
-type EventWithCantina = Event & {
-  cantina: Pick<Cantina, "name" | "code"> | null;
+type EventWithCantina = {
+  id: string;
+  companyId: string;
+  title: string;
+  eventDate: Date;
+  reminder24Sent: boolean;
+  reminder2Sent: boolean;
+  reminder30Sent: boolean;
+  cantina: {
+    name: string;
+    code: string;
+  } | null;
 };
+
 
 type ReminderType = "24H" | "2H" | "30M";
 
