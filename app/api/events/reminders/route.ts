@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { Cantina, Event } from "@prisma/client";
 
 export const runtime = "nodejs";
 
-type EventWithCantina = Event & {
-  cantina: Pick<Cantina, "name" | "code"> | null;
-};
-
 type ReminderType = "24H" | "2H" | "30M";
+
+type EventWithCantina = {
+  id: string;
+  companyId: string;
+  title: string;
+  eventDate: Date;
+  reminder24Sent: boolean;
+  reminder2Sent: boolean;
+  reminder30Sent: boolean;
+  cantina: {
+    name: string;
+    code: string;
+  } | null;
+};
 
 function minutesUntil(date: Date) {
   return Math.floor((date.getTime() - Date.now()) / 60000);
@@ -17,7 +26,7 @@ function minutesUntil(date: Date) {
 function reminderLabel(type: ReminderType) {
   if (type === "24H") return "24 horas";
   if (type === "2H") return "2 horas";
-  if (type === "30M") return "30 minutos";
+  return "30 minutos";
 }
 
 function reminderTitle(type: ReminderType, eventTitle: string) {
@@ -95,35 +104,40 @@ export async function GET() {
     let sent30m = 0;
 
     for (const event of events) {
-      const diff = minutesUntil(new Date(event.eventDate));
+      const typedEvent = event as EventWithCantina;
+      const diff = minutesUntil(new Date(typedEvent.eventDate));
 
-      if (diff <= 24 * 60 && diff > 23 * 60 && !event.reminder24Sent) {
-        await notifyEvent({ event, type: "24H" });
+      if (
+        diff <= 24 * 60 &&
+        diff > 23 * 60 &&
+        !typedEvent.reminder24Sent
+      ) {
+        await notifyEvent({ event: typedEvent, type: "24H" });
 
         await prisma.event.update({
-          where: { id: event.id },
+          where: { id: typedEvent.id },
           data: { reminder24Sent: true },
         });
 
         sent24h++;
       }
 
-      if (diff <= 2 * 60 && diff > 90 && !event.reminder2Sent) {
-        await notifyEvent({ event, type: "2H" });
+      if (diff <= 2 * 60 && diff > 90 && !typedEvent.reminder2Sent) {
+        await notifyEvent({ event: typedEvent, type: "2H" });
 
         await prisma.event.update({
-          where: { id: event.id },
+          where: { id: typedEvent.id },
           data: { reminder2Sent: true },
         });
 
         sent2h++;
       }
 
-      if (diff <= 30 && diff > 0 && !event.reminder30Sent) {
-        await notifyEvent({ event, type: "30M" });
+      if (diff <= 30 && diff > 0 && !typedEvent.reminder30Sent) {
+        await notifyEvent({ event: typedEvent, type: "30M" });
 
         await prisma.event.update({
-          where: { id: event.id },
+          where: { id: typedEvent.id },
           data: { reminder30Sent: true },
         });
 
