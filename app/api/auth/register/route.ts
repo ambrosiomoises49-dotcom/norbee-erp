@@ -10,7 +10,9 @@ import {
   looksLikeEmail,
   normalizeEmail,
 } from "@/lib/utils";
-import type { Prisma } from "@prisma/client";
+
+import { Prisma } from "@prisma/client";
+
 function cleanSlug(value: string) {
   return value
     .trim()
