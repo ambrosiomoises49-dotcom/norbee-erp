@@ -110,10 +110,17 @@ export async function GET() {
   c.cantinaId === cantina.id);
 
       const monthlySales = Array.from({ length: 12 }, (_, monthIndex) =>
-        cantinaSales
-          .filter((sale) => sale.createdAt.getMonth() === monthIndex)
-          .reduce((sum, sale) => sum + Number(sale.totalAmount), 0)
-      );
+  cantinaSales
+    .filter(
+      (sale: { createdAt: Date }) =>
+        sale.createdAt.getMonth() === monthIndex
+    )
+    .reduce(
+      (sum: number, sale: { totalAmount: unknown }) =>
+        sum + Number(sale.totalAmount),
+      0
+    )
+);
 
       const currentMonthSales = monthlySales[currentMonth] || 0;
 
