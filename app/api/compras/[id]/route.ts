@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
-import type { Prisma, PrismaClient } from "@prisma/client";
 
 type AdminSession = {
   userId: string;
@@ -11,16 +10,34 @@ type AdminSession = {
   identifier: string;
 };
 
-type TxClient = Omit<
-  PrismaClient,
+type TransactionClient = Omit<
+  typeof prisma,
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
+
+type PurchaseItem = {
+  productId: string;
+  quantity: number;
+  unitCost: DecimalValue | number;
+};
+type DecimalValue = {
+  toString(): string;
+};
+
+type PurchaseData = {
+  id: string;
+  purchaseNumber: string;
+  purchaseDate: Date;
+  totalAmount: DecimalValue;
+  transportCost?: DecimalValue | number | null;
+  otherCosts?: DecimalValue | number | null;
+  items: PurchaseItem[];
+};
+
 async function receivePurchase(
-  tx: TxClient,
-  purchase: Prisma.PurchaseGetPayload<{
-    include: { items: true };
-  }>,
+  tx: TransactionClient,
+  purchase: PurchaseData,
   session: AdminSession
 ) {
   for (const item of purchase.items) {
@@ -32,13 +49,13 @@ async function receivePurchase(
         quantity: {
           increment: item.quantity,
         },
-        avgCost: item.unitCost,
+        avgCost: Number(item.unitCost),
       },
       create: {
         companyId: session.companyId,
         productId: item.productId,
         quantity: item.quantity,
-        avgCost: item.unitCost,
+        avgCost: Number(item.unitCost),
       },
     });
 
@@ -47,7 +64,7 @@ async function receivePurchase(
         id: item.productId,
       },
       data: {
-        purchasePrice: item.unitCost,
+        purchasePrice: Number(item.unitCost),
       },
     });
 
@@ -70,7 +87,7 @@ async function receivePurchase(
       companyId: session.companyId,
       userId: session.userId,
       type: "EXPENSE",
-      amount: purchase.totalAmount,
+      amount: Number(purchase.totalAmount),
       description: `Compra ${purchase.purchaseNumber}`,
       date: purchase.purchaseDate,
       referenceType: "PURCHASE",
@@ -79,7 +96,8 @@ async function receivePurchase(
   });
 
   const extraCosts =
-    Number(purchase.transportCost || 0) + Number(purchase.otherCosts || 0);
+    Number(purchase.transportCost || 0) +
+    Number(purchase.otherCosts || 0);
 
   if (extraCosts > 0) {
     const category = await tx.costCategory.upsert({
@@ -199,23 +217,26 @@ export async function PATCH(
     }
 
     if (body.status === "RECEIVED") {
-      const updatedPurchase = await prisma.$transaction(async (tx) => {
-        const updated = await tx.purchase.update({
-          where: { id },
-          data: {
-            status: "RECEIVED",
-            invoiceNumber: body.invoiceNumber ?? purchase.invoiceNumber,
-            notes: body.notes ?? purchase.notes,
-          },
-          include: {
-            items: true,
-          },
-        });
+      const updatedPurchase = await prisma.$transaction(
+        async (tx: TransactionClient) => {
+          const updated = await tx.purchase.update({
+            where: { id },
+            data: {
+              status: "RECEIVED",
+              invoiceNumber:
+                body.invoiceNumber ?? purchase.invoiceNumber,
+              notes: body.notes ?? purchase.notes,
+            },
+            include: {
+              items: true,
+            },
+          });
 
-        await receivePurchase(tx, updated, session);
+          await receivePurchase(tx, updated, session);
 
-        return updated;
-      });
+          return updated;
+        }
+      );
 
       return NextResponse.json({
         message:
