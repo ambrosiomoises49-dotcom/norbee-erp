@@ -11,7 +11,7 @@ import {
   normalizeEmail,
 } from "@/lib/utils";
 
-import { Prisma } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
 function cleanSlug(value: string) {
   return value
@@ -22,6 +22,11 @@ function cleanSlug(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
+
+type TransactionClient = Omit<
+  PrismaClient,
+  "$connect" | "$disconnect" | "$on" | "$use" | "$extends"
+>;
 
 export async function POST(req: Request) {
   try {
@@ -100,7 +105,7 @@ export async function POST(req: Request) {
 
     const passwordHash = await hashPassword(password);
 
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const result = await prisma.$transaction(async (tx: TransactionClient) => {
       const company = await tx.company.create({
         data: {
           name: companyName.trim(),
