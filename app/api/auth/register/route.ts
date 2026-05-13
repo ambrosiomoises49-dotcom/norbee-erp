@@ -10,7 +10,7 @@ import {
   looksLikeEmail,
   normalizeEmail,
 } from "@/lib/utils";
-
+import type { Prisma } from "@prisma/client";
 function cleanSlug(value: string) {
   return value
     .trim()
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
 
     const passwordHash = await hashPassword(password);
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const company = await tx.company.create({
         data: {
           name: companyName.trim(),
