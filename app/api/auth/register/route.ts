@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+type TransactionClient = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$use" | "$extends"
+>;
 import {
   hashPassword,
   signSession,
@@ -11,7 +15,7 @@ import {
   normalizeEmail,
 } from "@/lib/utils";
 
-import type { PrismaClient } from "@prisma/client";
+
 
 function cleanSlug(value: string) {
   return value
@@ -23,10 +27,7 @@ function cleanSlug(value: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-type TransactionClient = Omit<
-  PrismaClient,
-  "$connect" | "$disconnect" | "$on" | "$use" | "$extends"
->;
+
 
 export async function POST(req: Request) {
   try {
