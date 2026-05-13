@@ -58,7 +58,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    const cantinaIds = cantinas.map((c) => c.id);
+    const cantinaIds = cantinas.map((c: { id: string }) => c.id);
 
     const [sales, costs] = await Promise.all([
       prisma.sale.findMany({
