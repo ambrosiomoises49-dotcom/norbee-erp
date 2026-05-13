@@ -103,71 +103,122 @@ export async function GET() {
     location?: string | null;
   }) => {
     const cantinaSales = sales.filter(
-      (s: { cantinaId: string | null }) =>
-  s.cantinaId === cantina.id
+      (s: {
+        cantinaId: string | null;
+        totalAmount: unknown;
+        createdAt: Date;
+      }) => s.cantinaId === cantina.id
     );
-    const cantinaCosts = costs.filter((c: { cantinaId: string | null }) =>
-  c.cantinaId === cantina.id);
 
-      const monthlySales = Array.from({ length: 12 }, (_, monthIndex) =>
-  cantinaSales
-    .filter(
-      (sale: { createdAt: Date }) =>
-        sale.createdAt.getMonth() === monthIndex
-    )
-    .reduce(
-      (sum: number, sale: { totalAmount: unknown }) =>
-        sum + Number(sale.totalAmount),
-      0
-    )
-);
+    const cantinaCosts = costs.filter(
+      (c: {
+        cantinaId: string | null;
+        amount: unknown;
+        costDate: Date;
+      }) => c.cantinaId === cantina.id
+    );
 
-      const currentMonthSales = monthlySales[currentMonth] || 0;
-
-      const previousMonthSales = cantinaSales
+    const monthlySales = Array.from({ length: 12 }, (_, monthIndex) =>
+      cantinaSales
         .filter(
-          (sale) =>
-            sale.createdAt.getFullYear() === previousYear &&
-            sale.createdAt.getMonth() === previousMonth
+          (sale: {
+            createdAt: Date;
+            totalAmount: unknown;
+          }) => sale.createdAt.getMonth() === monthIndex
         )
-        .reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
+        .reduce(
+          (
+            sum: number,
+            sale: {
+              totalAmount: unknown;
+            }
+          ) => sum + Number(sale.totalAmount),
+          0
+        )
+    );
 
-      const currentMonthCosts = cantinaCosts
-        .filter((cost) => cost.costDate.getMonth() === currentMonth)
-        .reduce((sum, cost) => sum + Number(cost.amount), 0);
+    const currentMonthSales = monthlySales[currentMonth] || 0;
 
-      const currentMonthProfit = currentMonthSales - currentMonthCosts;
+    const previousMonthSales = cantinaSales
+      .filter(
+        (sale: {
+          createdAt: Date;
+          totalAmount: unknown;
+        }) =>
+          sale.createdAt.getFullYear() === previousYear &&
+          sale.createdAt.getMonth() === previousMonth
+      )
+      .reduce(
+        (
+          sum: number,
+          sale: {
+            totalAmount: unknown;
+          }
+        ) => sum + Number(sale.totalAmount),
+        0
+      );
 
-      const growthPercent =
-        previousMonthSales > 0
-          ? Number(
-              (
-                ((currentMonthSales - previousMonthSales) /
-                  previousMonthSales) *
-                100
-              ).toFixed(2)
-            )
-          : 0;
+    const currentMonthCosts = cantinaCosts
+      .filter(
+        (cost: {
+          costDate: Date;
+          amount: unknown;
+        }) => cost.costDate.getMonth() === currentMonth
+      )
+      .reduce(
+        (
+          sum: number,
+          cost: {
+            amount: unknown;
+          }
+        ) => sum + Number(cost.amount),
+        0
+      );
 
-      const dailySales: Record<string, number> = {};
+    const currentMonthProfit =
+      currentMonthSales - currentMonthCosts;
 
-      cantinaSales.forEach((sale) => {
-        const key = sale.createdAt.toISOString().slice(0, 10);
-        dailySales[key] = (dailySales[key] || 0) + Number(sale.totalAmount);
-      });
+    const growthPercent =
+      previousMonthSales > 0
+        ? Number(
+            (
+              ((currentMonthSales - previousMonthSales) /
+                previousMonthSales) *
+              100
+            ).toFixed(2)
+          )
+        : 0;
 
-      return {
-        ...cantina,
-        performance: {
-          currentMonthSales,
-          currentMonthCosts,
-          currentMonthProfit,
-          growthPercent,
-          monthlySales,
-          dailySales,
-        },
-      };
-    });
+    const dailySales: Record<string, number> = {};
+
+    cantinaSales.forEach(
+      (sale: {
+        createdAt: Date;
+        totalAmount: unknown;
+      }) => {
+        const key = sale.createdAt
+          .toISOString()
+          .slice(0, 10);
+
+        dailySales[key] =
+          (dailySales[key] || 0) +
+          Number(sale.totalAmount);
+      }
+    );
+
+    return {
+      ...cantina,
+      performance: {
+        currentMonthSales,
+        currentMonthCosts,
+        currentMonthProfit,
+        growthPercent,
+        monthlySales,
+        dailySales,
+      },
+    };
+  }
+);
 
     return NextResponse.json({
       companySlug: company?.slug || "millenor",
@@ -254,7 +305,13 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const result = await prisma.$transaction(async (tx) => {
+    type TransactionClient = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$use" | "$extends"
+>;
+
+const result = await prisma.$transaction(
+  async (tx: TransactionClient) => {
       const cantina = await tx.cantina.create({
         data: {
           companyId: session.companyId,
