@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 
+type TransactionClient = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$use" | "$extends"
+>;
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -194,7 +198,7 @@ export async function DELETE(
       );
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: TransactionClient) => {
       await tx.user.deleteMany({
         where: {
           cantinaId: id,
