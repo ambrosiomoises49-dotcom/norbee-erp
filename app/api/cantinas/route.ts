@@ -95,9 +95,10 @@ export async function GET() {
       }),
     ]);
 
-    const cantinasWithPerformance = cantinas.map((cantina) => {
-      const cantinaSales = sales.filter((s) => s.cantinaId === cantina.id);
-      const cantinaCosts = costs.filter((c) => c.cantinaId === cantina.id);
+    const cantinasWithPerformance = cantinas.map(
+   (cantina: { id: string; name: string; code?: string | null; location?: string | null }) => {
+    const cantinaSales = sales.filter((s) => s.cantinaId === cantina.id);
+    const cantinaCosts = costs.filter((c) => c.cantinaId === cantina.id);
 
       const monthlySales = Array.from({ length: 12 }, (_, monthIndex) =>
         cantinaSales
