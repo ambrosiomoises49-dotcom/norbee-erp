@@ -2,6 +2,19 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 
+type TransactionClient = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;
+
+type FinanceBody = {
+  amount?: number | string;
+  type?: "INCOME" | "EXPENSE";
+  description?: string;
+  date?: string;
+  financialAccountId?: string | null;
+};
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -9,7 +22,7 @@ export async function PATCH(
   try {
     const session = await requireAdmin();
     const { id } = await params;
-    const body = await request.json();
+    const body = (await request.json()) as FinanceBody;
 
     const transaction = await prisma.financeTransaction.findFirst({
       where: {
@@ -36,6 +49,7 @@ export async function PATCH(
     }
 
     const oldAmount = Number(transaction.amount || 0);
+
     const newAmount =
       body.amount === undefined || body.amount === ""
         ? oldAmount
@@ -47,42 +61,44 @@ export async function PATCH(
     const oldAccountId = transaction.financialAccountId;
     const newAccountId = body.financialAccountId ?? oldAccountId;
 
-    const updated = await prisma.$transaction(async (tx) => {
-      if (oldAccountId) {
-        await tx.financialAccount.update({
-          where: { id: oldAccountId },
+    const updated = await prisma.$transaction(
+      async (tx: TransactionClient) => {
+        if (oldAccountId) {
+          await tx.financialAccount.update({
+            where: { id: oldAccountId },
+            data: {
+              balance:
+                oldType === "INCOME"
+                  ? { decrement: oldAmount }
+                  : { increment: oldAmount },
+            },
+          });
+        }
+
+        if (newAccountId) {
+          await tx.financialAccount.update({
+            where: { id: newAccountId },
+            data: {
+              balance:
+                newType === "INCOME"
+                  ? { increment: newAmount }
+                  : { decrement: newAmount },
+            },
+          });
+        }
+
+        return tx.financeTransaction.update({
+          where: { id },
           data: {
-            balance:
-              oldType === "INCOME"
-                ? { decrement: oldAmount }
-                : { increment: oldAmount },
+            type: newType,
+            amount: newAmount,
+            description: body.description ?? undefined,
+            date: body.date ? new Date(body.date) : undefined,
+            financialAccountId: newAccountId,
           },
         });
       }
-
-      if (newAccountId) {
-        await tx.financialAccount.update({
-          where: { id: newAccountId },
-          data: {
-            balance:
-              newType === "INCOME"
-                ? { increment: newAmount }
-                : { decrement: newAmount },
-          },
-        });
-      }
-
-      return tx.financeTransaction.update({
-        where: { id },
-        data: {
-          type: newType,
-          amount: newAmount,
-          description: body.description ?? undefined,
-          date: body.date ? new Date(body.date) : undefined,
-          financialAccountId: newAccountId,
-        },
-      });
-    });
+    );
 
     return NextResponse.json({
       message: "Transação atualizada com sucesso.",
@@ -130,7 +146,7 @@ export async function DELETE(
       );
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: TransactionClient) => {
       if (transaction.financialAccountId) {
         await tx.financialAccount.update({
           where: { id: transaction.financialAccountId },

@@ -2,6 +2,22 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 
+type TransactionClient = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;
+
+type FinanceTransactionType = "INCOME" | "EXPENSE";
+type FinancialAccountTypeValue = "CASH" | "BANK" | "MOBILE_MONEY" | "OTHER";
+
+type FinanceBody = {
+  type?: FinanceTransactionType;
+  amount?: number | string;
+  description?: string | null;
+  date?: string;
+  financialAccountId?: string | null;
+};
+
 async function ensureDefaultAccount(companyId: string) {
   const existing = await prisma.financialAccount.findFirst({
     where: {
@@ -16,7 +32,7 @@ async function ensureDefaultAccount(companyId: string) {
     data: {
       companyId,
       name: "Caixa principal",
-      type: "CASH",
+      type: "CASH" as FinancialAccountTypeValue,
       isDefault: true,
       balance: 0,
       status: "ACTIVE",
@@ -52,9 +68,11 @@ export async function GET(request: Request) {
         where: {
           companyId: session.companyId,
           ...(type && type !== "ALL"
-            ? { type: type as "INCOME" | "EXPENSE" }
+            ? { type: type as FinanceTransactionType }
             : {}),
-          ...(referenceType && referenceType !== "ALL" ? { referenceType } : {}),
+          ...(referenceType && referenceType !== "ALL"
+            ? { referenceType }
+            : {}),
           ...(accountId && accountId !== "ALL"
             ? { financialAccountId: accountId }
             : {}),
@@ -82,7 +100,7 @@ export async function GET(request: Request) {
       accounts,
       transactions,
     });
-  }    catch (error) {
+  } catch (error) {
     console.error("ERRO API FINANCAS GET:", error);
 
     return NextResponse.json(
@@ -95,7 +113,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireAdmin();
-    const body = await request.json();
+    const body = (await request.json()) as FinanceBody;
 
     const { type, amount, description, date, financialAccountId } = body;
 
@@ -107,7 +125,10 @@ export async function POST(request: Request) {
     }
 
     if (!["INCOME", "EXPENSE"].includes(type)) {
-      return NextResponse.json({ message: "Tipo inválido." }, { status: 400 });
+      return NextResponse.json(
+        { message: "Tipo inválido." },
+        { status: 400 }
+      );
     }
 
     const amountValue = Number(amount);
@@ -123,33 +144,35 @@ export async function POST(request: Request) {
       financialAccountId ||
       (await ensureDefaultAccount(session.companyId)).id;
 
-    const transaction = await prisma.$transaction(async (tx) => {
-      const created = await tx.financeTransaction.create({
-        data: {
-          companyId: session.companyId,
-          userId: session.userId,
-          financialAccountId: account,
-          type,
-          amount: amountValue,
-          description: description || null,
-          date: date ? new Date(date) : new Date(),
-          referenceType: "MANUAL",
-          referenceId: null,
-        },
-      });
+    const transaction = await prisma.$transaction(
+      async (tx: TransactionClient) => {
+        const created = await tx.financeTransaction.create({
+          data: {
+            companyId: session.companyId,
+            userId: session.userId,
+            financialAccountId: account,
+            type,
+            amount: amountValue,
+            description: description || null,
+            date: date ? new Date(date) : new Date(),
+            referenceType: "MANUAL",
+            referenceId: null,
+          },
+        });
 
-      await tx.financialAccount.update({
-        where: { id: account },
-        data: {
-          balance:
-            type === "INCOME"
-              ? { increment: amountValue }
-              : { decrement: amountValue },
-        },
-      });
+        await tx.financialAccount.update({
+          where: { id: account },
+          data: {
+            balance:
+              type === "INCOME"
+                ? { increment: amountValue }
+                : { decrement: amountValue },
+          },
+        });
 
-      return created;
-    });
+        return created;
+      }
+    );
 
     return NextResponse.json({
       message: "Transação registada com sucesso.",

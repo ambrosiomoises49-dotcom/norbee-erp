@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { Prisma } from "@prisma/client";
 
 function toNumber(value: unknown) {
   return Number(value || 0);
@@ -20,6 +19,15 @@ function generateInvoiceNumber() {
     .padStart(4, "0");
 
   return `FT-${stamp}-${random}`;
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "P2002"
+  );
 }
 
 export async function GET(
@@ -84,10 +92,7 @@ export async function GET(
           },
         });
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === "P2002"
-        ) {
+        if (isUniqueConstraintError(error)) {
           invoice = await prisma.invoice.findUnique({
             where: {
               saleId: sale.id,
