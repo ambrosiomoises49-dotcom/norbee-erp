@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 
+type SupplierBody = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  taxId?: string;
+};
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -9,14 +17,17 @@ export async function PATCH(
   try {
     const session = await requireAdmin();
     const { id } = await params;
-    const body = await request.json();
+    const body = (await request.json()) as SupplierBody;
 
     const supplier = await prisma.supplier.findFirst({
       where: { id, companyId: session.companyId },
     });
 
     if (!supplier) {
-      return NextResponse.json({ message: "Fornecedor não encontrado." }, { status: 404 });
+      return NextResponse.json(
+        { message: "Fornecedor não encontrado." },
+        { status: 404 }
+      );
     }
 
     const updated = await prisma.supplier.update({
@@ -32,7 +43,10 @@ export async function PATCH(
 
     return NextResponse.json({ supplier: updated });
   } catch {
-    return NextResponse.json({ message: "Erro ao editar fornecedor." }, { status: 500 });
+    return NextResponse.json(
+      { message: "Erro ao editar fornecedor." },
+      { status: 500 }
+    );
   }
 }
 
@@ -55,6 +69,9 @@ export async function DELETE(
 
     return NextResponse.json({ message: "Fornecedor apagado." });
   } catch {
-    return NextResponse.json({ message: "Erro ao apagar fornecedor." }, { status: 500 });
+    return NextResponse.json(
+      { message: "Erro ao apagar fornecedor." },
+      { status: 500 }
+    );
   }
 }

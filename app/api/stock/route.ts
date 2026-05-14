@@ -2,6 +2,24 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 
+type TransactionClient = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;
+
+type ProductBody = {
+  name?: string;
+  internalCode?: string;
+  barcode?: string;
+  unit?: string;
+  categoryId?: string | null;
+  supplierId?: string | null;
+  purchasePrice?: number | string;
+  salePrice?: number | string;
+  minStock?: number | string;
+  initialQuantity?: number | string;
+};
+
 export async function GET() {
   try {
     const session = await requireAdmin();
@@ -53,7 +71,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireAdmin();
-    const body = await request.json();
+    const body = (await request.json()) as ProductBody;
 
     const {
       name,
@@ -90,60 +108,66 @@ export async function POST(request: Request) {
     }
 
     const quantity = Number(initialQuantity || 0);
+    const purchasePriceValue = Number(purchasePrice || 0);
+    const salePriceValue = Number(salePrice || 0);
+    const minStockValue = Number(minStock || 0);
 
-    const product = await prisma.$transaction(async (tx) => {
-      const createdProduct = await tx.product.create({
-        data: {
-          companyId: session.companyId,
-          name,
-          internalCode,
-          barcode: barcode || null,
-          unit: unit || "UN",
-          categoryId: categoryId || null,
-          supplierId: supplierId || null,
-          purchasePrice: purchasePrice || 0,
-          salePrice: salePrice || 0,
-          minStock: Number(minStock || 0),
-          status: "ACTIVE",
-        },
-      });
+    const product = await prisma.$transaction(
+      async (tx: TransactionClient) => {
+        const createdProduct = await tx.product.create({
+          data: {
+            companyId: session.companyId,
+            name,
+            internalCode,
+            barcode: barcode || null,
+            unit: unit || "UN",
+            categoryId: categoryId || null,
+            supplierId: supplierId || null,
+            purchasePrice: purchasePriceValue,
+            salePrice: salePriceValue,
+            minStock: minStockValue,
+            status: "ACTIVE",
+          },
+        });
 
-      await tx.centralStock.create({
-        data: {
-          companyId: session.companyId,
-          productId: createdProduct.id,
-          quantity,
-          avgCost: purchasePrice || 0,
-        },
-      });
-
-      if (quantity > 0) {
-        await tx.stockMovement.create({
+        await tx.centralStock.create({
           data: {
             companyId: session.companyId,
             productId: createdProduct.id,
-            userId: session.userId,
-            type: "ADJUSTMENT_IN",
             quantity,
-            reason: "Stock inicial do produto",
+            avgCost: purchasePriceValue,
           },
         });
-      }
-if (quantity <= Number(minStock || 0)) {
-  await tx.notification.create({
-    data: {
-      companyId: session.companyId,
-      userId: session.userId,
-      type: "STOCK_LOW",
-      title: "Stock baixo",
-      message: `O produto ${name} está com stock baixo.`,
-      link: "/stock",
-    },
-  });
-}
 
-      return createdProduct;
-    });
+        if (quantity > 0) {
+          await tx.stockMovement.create({
+            data: {
+              companyId: session.companyId,
+              productId: createdProduct.id,
+              userId: session.userId,
+              type: "ADJUSTMENT_IN",
+              quantity,
+              reason: "Stock inicial do produto",
+            },
+          });
+        }
+
+        if (quantity <= minStockValue) {
+          await tx.notification.create({
+            data: {
+              companyId: session.companyId,
+              userId: session.userId,
+              type: "STOCK_LOW",
+              title: "Stock baixo",
+              message: `O produto ${name} está com stock baixo.`,
+              link: "/stock",
+            },
+          });
+        }
+
+        return createdProduct;
+      }
+    );
 
     return NextResponse.json({
       message: "Produto criado com sucesso.",

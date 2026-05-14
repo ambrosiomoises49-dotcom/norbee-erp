@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 
+type CategoryBody = {
+  name?: string;
+  code?: string | null;
+};
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -9,24 +14,33 @@ export async function PATCH(
   try {
     const session = await requireAdmin();
     const { id } = await params;
-    const { name, code } = await request.json();
+    const { name, code } = (await request.json()) as CategoryBody;
 
     const category = await prisma.category.findFirst({
       where: { id, companyId: session.companyId },
     });
 
     if (!category) {
-      return NextResponse.json({ message: "Categoria não encontrada." }, { status: 404 });
+      return NextResponse.json(
+        { message: "Categoria não encontrada." },
+        { status: 404 }
+      );
     }
 
     const updated = await prisma.category.update({
       where: { id },
-      data: { name, code: code || null },
+      data: {
+        name,
+        code: code || null,
+      },
     });
 
     return NextResponse.json({ category: updated });
   } catch {
-    return NextResponse.json({ message: "Erro ao editar categoria." }, { status: 500 });
+    return NextResponse.json(
+      { message: "Erro ao editar categoria." },
+      { status: 500 }
+    );
   }
 }
 
@@ -49,6 +63,9 @@ export async function DELETE(
 
     return NextResponse.json({ message: "Categoria apagada." });
   } catch {
-    return NextResponse.json({ message: "Erro ao apagar categoria." }, { status: 500 });
+    return NextResponse.json(
+      { message: "Erro ao apagar categoria." },
+      { status: 500 }
+    );
   }
 }

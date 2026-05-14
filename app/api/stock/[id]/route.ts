@@ -2,6 +2,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 
+type ProductBody = {
+  name?: string;
+  internalCode?: string;
+  barcode?: string;
+  unit?: string;
+  categoryId?: string | null;
+  supplierId?: string | null;
+  purchasePrice?: number | string;
+  salePrice?: number | string;
+  minStock?: number | string;
+};
+
+type TransactionClient = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -9,7 +26,8 @@ export async function PATCH(
   try {
     const session = await requireAdmin();
     const { id } = await params;
-    const body = await request.json();
+
+    const body = (await request.json()) as ProductBody;
 
     const product = await prisma.product.findFirst({
       where: {
@@ -34,8 +52,8 @@ export async function PATCH(
         unit: body.unit || "UN",
         categoryId: body.categoryId || null,
         supplierId: body.supplierId || null,
-        purchasePrice: body.purchasePrice || 0,
-        salePrice: body.salePrice || 0,
+        purchasePrice: Number(body.purchasePrice || 0),
+        salePrice: Number(body.salePrice || 0),
         minStock: Number(body.minStock || 0),
       },
     });
@@ -100,7 +118,7 @@ export async function DELETE(
       });
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: TransactionClient) => {
       await tx.centralStock.deleteMany({
         where: {
           productId: id,
