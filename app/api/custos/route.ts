@@ -17,6 +17,31 @@ type CostBody = {
   financialAccountId?: string;
 };
 
+async function ensureDefaultAccount(
+  companyId: string,
+  tx: TransactionClient
+) {
+  const existing = await tx.financialAccount.findFirst({
+    where: {
+      companyId,
+      isDefault: true,
+    },
+  });
+
+  if (existing) return existing;
+
+  return tx.financialAccount.create({
+    data: {
+      companyId,
+      name: "Caixa principal",
+      type: "CASH",
+      isDefault: true,
+      balance: 0,
+      status: "ACTIVE",
+    },
+  });
+}
+
 export async function GET() {
   try {
     const session = await requireAdmin();
@@ -93,14 +118,12 @@ export async function POST(request: Request) {
       costDate,
       referencePeriod,
       description,
-      financialAccountId,
     } = body;
 
-    if (!categoryId || !amount || !financialAccountId) {
+    if (!categoryId || !amount) {
       return NextResponse.json(
         {
-          message:
-            "Categoria, valor e conta financeira são obrigatórios para pagar.",
+          message: "Categoria e valor são obrigatórios para pagar.",
         },
         { status: 400 }
       );
@@ -158,25 +181,15 @@ export async function POST(request: Request) {
       }
     }
 
-    const account = await prisma.financialAccount.findFirst({
-      where: {
-        id: financialAccountId,
-        companyId: session.companyId,
-        status: "ACTIVE",
-      },
-    });
-
-    if (!account) {
-      return NextResponse.json(
-        { message: "Conta financeira inválida." },
-        { status: 400 }
-      );
-    }
-
     const date = costDate ? new Date(costDate) : new Date();
 
     const result = await prisma.$transaction(
       async (tx: TransactionClient) => {
+        const defaultAccount = await ensureDefaultAccount(
+          session.companyId,
+          tx
+        );
+
         const cost = await tx.cost.create({
           data: {
             companyId: session.companyId,
@@ -188,7 +201,7 @@ export async function POST(request: Request) {
             isAutomatic: false,
             paymentStatus: "PAID",
             paidAt: date,
-            financialAccountId,
+            financialAccountId: defaultAccount.id,
             referencePeriod: referencePeriod || null,
           },
           include: {
@@ -202,7 +215,7 @@ export async function POST(request: Request) {
           data: {
             companyId: session.companyId,
             userId: session.userId,
-            financialAccountId,
+            financialAccountId: defaultAccount.id,
             type: "EXPENSE",
             amount: amountValue,
             description:
@@ -217,7 +230,7 @@ export async function POST(request: Request) {
         });
 
         await tx.financialAccount.update({
-          where: { id: financialAccountId },
+          where: { id: defaultAccount.id },
           data: {
             balance: {
               decrement: amountValue,

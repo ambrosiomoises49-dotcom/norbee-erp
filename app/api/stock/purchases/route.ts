@@ -31,6 +31,31 @@ type PurchaseBody = {
   items?: Item[];
 };
 
+async function ensureDefaultAccount(
+  companyId: string,
+  tx: TransactionClient
+) {
+  const existing = await tx.financialAccount.findFirst({
+    where: {
+      companyId,
+      isDefault: true,
+    },
+  });
+
+  if (existing) return existing;
+
+  return tx.financialAccount.create({
+    data: {
+      companyId,
+      name: "Caixa principal",
+      type: "CASH",
+      isDefault: true,
+      balance: 0,
+      status: "ACTIVE",
+    },
+  });
+}
+
 async function ensureCostCategory({
   companyId,
   name,
@@ -141,6 +166,12 @@ export async function POST(request: Request) {
 
     const purchaseNumber = `COMP-${Date.now()}`;
 
+    const merchandiseCategory = await ensureCostCategory({
+      companyId: session.companyId,
+      name: "Compra de mercadoria",
+      description: "Valor principal das mercadorias compradas para stock.",
+    });
+
     const transportCategory =
       transport > 0
         ? await ensureCostCategory({
@@ -161,6 +192,11 @@ export async function POST(request: Request) {
 
     const purchase = await prisma.$transaction(
       async (tx: TransactionClient) => {
+        const defaultAccount = await ensureDefaultAccount(
+          session.companyId,
+          tx
+        );
+
         const createdPurchase = await tx.purchase.create({
           data: {
             companyId: session.companyId,
@@ -253,6 +289,24 @@ export async function POST(request: Request) {
           });
         }
 
+        if (subtotal > 0) {
+          await tx.cost.create({
+            data: {
+              companyId: session.companyId,
+              categoryId: merchandiseCategory.id,
+              cantinaId: null,
+              description: `Compra de mercadoria ${purchaseNumber}`,
+              amount: subtotal,
+              costDate: new Date(),
+              isAutomatic: true,
+              paymentStatus: "PAID",
+              paidAt: new Date(),
+              financialAccountId: defaultAccount.id,
+              referencePeriod: purchaseNumber,
+            },
+          });
+        }
+
         if (transport > 0 && transportCategory) {
           await tx.cost.create({
             data: {
@@ -265,6 +319,7 @@ export async function POST(request: Request) {
               isAutomatic: true,
               paymentStatus: "PAID",
               paidAt: new Date(),
+              financialAccountId: defaultAccount.id,
               referencePeriod: purchaseNumber,
             },
           });
@@ -282,6 +337,7 @@ export async function POST(request: Request) {
               isAutomatic: true,
               paymentStatus: "PAID",
               paidAt: new Date(),
+              financialAccountId: defaultAccount.id,
               referencePeriod: purchaseNumber,
             },
           });
@@ -291,11 +347,24 @@ export async function POST(request: Request) {
           data: {
             companyId: session.companyId,
             userId: session.userId,
+            financialAccountId: defaultAccount.id,
             type: "EXPENSE",
             amount: totalAmount,
             description: `Compra ${purchaseNumber}`,
+            date: new Date(),
             referenceType: "PURCHASE",
             referenceId: createdPurchase.id,
+          },
+        });
+
+        await tx.financialAccount.update({
+          where: {
+            id: defaultAccount.id,
+          },
+          data: {
+            balance: {
+              decrement: totalAmount,
+            },
           },
         });
 
