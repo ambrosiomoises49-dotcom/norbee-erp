@@ -1,38 +1,28 @@
+import type { ReactNode } from "react";
 import {
   Brain,
   AlertTriangle,
   Lightbulb,
   TrendingUp,
+  Database,
 } from "lucide-react";
 
-type AiDashboardData = {
-  success: boolean;
-  metrics: {
-    sales: number;
-    costs: number;
-    profit: number;
-    lowStock: number;
-    cantinas: number;
-    employees: number;
-  };
-  reasoning: string[];
-  recommendations: string[];
-};
+import { requireAdmin } from "@/lib/auth";
+import { buildAiDashboardData } from "@/lib/ai/erp-ai";
 
-async function getAiDashboard(): Promise<AiDashboardData | null> {
+async function getAiDashboard() {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const session = await requireAdmin();
+    const data = await buildAiDashboardData(session.companyId);
 
-    const response = await fetch(`${baseUrl}/api/ai/dashboard`, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    return (await response.json()) as AiDashboardData;
-  } catch {
+    return {
+      success: true,
+      alerts: data.alerts,
+      reasoning: data.reasoning,
+      memorySummary: data.memory_summary,
+    };
+  } catch (error) {
+    console.error("ERRO PAGE IA:", error);
     return null;
   }
 }
@@ -40,9 +30,12 @@ async function getAiDashboard(): Promise<AiDashboardData | null> {
 export default async function ConseilGestionPage() {
   const data = await getAiDashboard();
 
-  if (!data || !data.success) {
+  if (!data?.success) {
     return <div className="p-6">Impossible de charger l’IA.</div>;
   }
+
+  const recommendations = data.reasoning.recommendation_explanation || [];
+  const priorities = data.reasoning.priority_explanation || [];
 
   return (
     <div className="space-y-6 p-6">
@@ -58,38 +51,84 @@ export default async function ConseilGestionPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card title="Ventes" value={data.metrics.sales} />
-        <Card title="Coûts" value={data.metrics.costs} />
-        <Card title="Profit" value={data.metrics.profit} />
-        <Card title="Stock bas" value={data.metrics.lowStock} />
-        <Card title="Cantinas" value={data.metrics.cantinas} />
-        <Card title="Employés" value={data.metrics.employees} />
+        <Card title="Alertes IA" value={data.alerts.length} />
+        <Card title="Mémoires IA" value={data.memorySummary.count || 0} />
+        <Card title="Catégories IA" value={Object.keys(data.memorySummary.categories || {}).length} />
       </div>
 
       <Panel title="Raisonnement IA" icon={<TrendingUp size={20} />}>
-        {data.reasoning.map((item, index) => (
-          <p key={index} className="rounded-xl bg-slate-50 p-3 text-slate-700">
-            {item}
+        <p className="rounded-xl bg-slate-50 p-3 text-slate-700">
+          {data.reasoning.main_explanation ||
+            "Aucun raisonnement principal disponible."}
+        </p>
+
+        <p className="rounded-xl bg-slate-50 p-3 text-slate-700">
+          {data.reasoning.risk_interpretation ||
+            "Aucune interprétation du risque disponible."}
+        </p>
+
+        <p className="rounded-xl bg-slate-50 p-3 text-slate-500">
+          {data.reasoning.memory_context ||
+            "Aucun contexte mémoire disponible."}
+        </p>
+      </Panel>
+
+      <Panel title="Alertes IA" icon={<AlertTriangle size={20} />}>
+        {data.alerts.length > 0 ? (
+          data.alerts.map((alert, index) => (
+            <div
+              key={`${alert.title}-${index}`}
+              className="rounded-xl bg-red-50 p-3 text-red-700"
+            >
+              <p className="font-bold">{alert.title}</p>
+              <p className="text-sm">{alert.message}</p>
+              <p className="mt-1 text-xs">Niveau : {alert.level}</p>
+            </div>
+          ))
+        ) : (
+          <p className="rounded-xl bg-slate-50 p-3 text-slate-500">
+            Aucune alerte IA détectée.
           </p>
-        ))}
+        )}
+      </Panel>
+
+      <Panel title="Priorités IA" icon={<Database size={20} />}>
+        {priorities.length > 0 ? (
+          priorities.map((item, index) => (
+            <div
+              key={`${item.title}-${index}`}
+              className="rounded-xl bg-slate-50 p-3 text-slate-700"
+            >
+              <p className="font-bold">{item.title || "Priorité"}</p>
+              <p className="text-sm">{item.reason}</p>
+            </div>
+          ))
+        ) : (
+          <p className="rounded-xl bg-slate-50 p-3 text-slate-500">
+            Aucune priorité disponible.
+          </p>
+        )}
       </Panel>
 
       <Panel title="Recommandations IA" icon={<Lightbulb size={20} />}>
-        {data.recommendations.map((item, index) => (
-          <p key={index} className="rounded-xl bg-yellow-50 p-3 text-slate-700">
-            {item}
+        {recommendations.length > 0 ? (
+          recommendations.map((item, index) => (
+            <div
+              key={`${item.recommendation}-${index}`}
+              className="rounded-xl bg-yellow-50 p-3 text-slate-700"
+            >
+              <p className="font-bold">
+                {item.recommendation || "Recommandation"}
+              </p>
+              <p className="text-sm">{item.reason}</p>
+            </div>
+          ))
+        ) : (
+          <p className="rounded-xl bg-slate-50 p-3 text-slate-500">
+            Aucune recommandation disponible.
           </p>
-        ))}
+        )}
       </Panel>
-
-      {data.metrics.lowStock > 0 && (
-        <Panel title="Alerte stock" icon={<AlertTriangle size={20} />}>
-          <p className="rounded-xl bg-red-50 p-3 text-red-700">
-            Certains produits sont sous le seuil minimum. Il faut prévoir un
-            réapprovisionnement.
-          </p>
-        </Panel>
-      )}
     </div>
   );
 }
@@ -111,8 +150,8 @@ function Panel({
   children,
 }: {
   title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
+  icon: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -128,6 +167,6 @@ function Panel({
 
 function formatValue(value: number) {
   return new Intl.NumberFormat("pt-PT", {
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0,
   }).format(value);
 }
