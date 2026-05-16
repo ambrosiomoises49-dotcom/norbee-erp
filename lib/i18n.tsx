@@ -36,6 +36,84 @@ type Dictionary = Record<
 
 const dictionary: Dictionary = {
 
+  aiLoadError: {
+  pt: "Erro ao carregar a IA.",
+  fr: "Erreur lors du chargement de l’IA.",
+  en: "Error while loading AI.",
+},
+
+aiContactError: {
+  pt: "Não foi possível contactar o motor IA.",
+  fr: "Impossible de contacter le moteur IA.",
+  en: "Unable to contact the AI engine.",
+},
+
+aiAnalysisError: {
+  pt: "Erro durante a análise IA.",
+  fr: "Erreur lors de l’analyse IA.",
+  en: "Error during AI analysis.",
+},
+
+aiLoading: {
+  pt: "Carregando inteligência artificial...",
+  fr: "Chargement de l’intelligence artificielle...",
+  en: "Loading artificial intelligence...",
+},
+
+aiStatusStable: {
+  pt: "Estável",
+  fr: "Stable",
+  en: "Stable",
+},
+
+aiStatusWatch: {
+  pt: "A monitorizar",
+  fr: "À surveiller",
+  en: "Under watch",
+},
+
+aiStatusRisk: {
+  pt: "Risco elevado",
+  fr: "Risque élevé",
+  en: "High risk",
+},
+
+aiBusinessStatus: {
+  pt: "Estado da empresa",
+  fr: "État entreprise",
+  en: "Business status",
+},
+
+aiAlerts: {
+  pt: "Alertas IA",
+  fr: "Alertes IA",
+  en: "AI Alerts",
+},
+
+aiMemories: {
+  pt: "Memórias IA",
+  fr: "Mémoires IA",
+  en: "AI Memories",
+},
+
+aiRecommendations: {
+  pt: "Recomendações IA",
+  fr: "Recommandations IA",
+  en: "AI Recommendations",
+},
+
+aiForecasts: {
+  pt: "Previsões IA",
+  fr: "Prévisions IA",
+  en: "AI Forecasts",
+},
+
+aiAnalyzeNow: {
+  pt: "Analisar agora",
+  fr: "Analyser maintenant",
+  en: "Analyze now",
+},
+
   changeLanguage: {
   pt: "Mudar língua",
   fr: "Changer la langue",
