@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 
@@ -28,7 +29,6 @@ import {
 } from "recharts";
 
 import EventsCalendar from "@/features/dashboard/components/EventsCalendar";
-import ManagementAdvice from "@/features/dashboard/components/ManagementAdvice";
 
 type DashboardData = {
   cards: {
@@ -96,39 +96,39 @@ type DashboardData = {
 };
 
 export default function DashboardClient() {
+  const router = useRouter();
   const { t, lang } = useI18n();
 
   const [eventsOpen, setEventsOpen] = useState(false);
-  const [adviceOpen, setAdviceOpen] = useState(false);
-
   const [data, setData] = useState<DashboardData | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [currency, setCurrency] = useState("EUR");
 
   async function loadCompanyCurrency() {
-  try {
-    const res = await fetch("/api/company/currency", {
-      cache: "no-store",
-    });
+    try {
+      const res = await fetch("/api/company/currency", {
+        cache: "no-store",
+      });
 
-    const json = await res.json();
+      const json = (await res.json()) as { currency?: string };
 
-    if (res.ok && json.currency) {
-      setCurrency(json.currency);
+      if (res.ok && json.currency) {
+        setCurrency(json.currency);
+      }
+    } catch {
+      // mantém moeda padrão
     }
-  } catch {
-    // mantém moeda padrão
   }
-}
 
   async function loadDashboard() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/dashboard");
+      const res = await fetch("/api/dashboard", {
+        cache: "no-store",
+      });
 
-      const json = await res.json();
+      const json = (await res.json()) as DashboardData;
 
       if (res.ok) {
         setData(json);
@@ -139,50 +139,38 @@ export default function DashboardClient() {
   }
 
   useEffect(() => {
-  const timeout = setTimeout(() => {
-    void loadDashboard();
-    void loadCompanyCurrency();
-  }, 0);
+    const timeout = setTimeout(() => {
+      void loadDashboard();
+      void loadCompanyCurrency();
+    }, 0);
 
-  return () => clearTimeout(timeout);
-}, []);
+    return () => clearTimeout(timeout);
+  }, []);
 
   function formatMoney(value: number | string) {
-  const amount = Number(value || 0);
+    const amount = Number(value || 0);
 
-  const locale =
-    lang === "fr" ? "fr-FR" : lang === "en" ? "en-GB" : "pt-PT";
+    const locale =
+      lang === "fr" ? "fr-FR" : lang === "en" ? "en-GB" : "pt-PT";
 
-  if (currency === "AOA") {
-    return `${new Intl.NumberFormat(locale, {
+    if (currency === "AOA") {
+      return `${new Intl.NumberFormat(locale, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(Number.isFinite(amount) ? amount : 0)} Kz`;
+    }
+
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(Number.isFinite(amount) ? amount : 0)} Kz`;
-  }
-
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(amount) ? amount : 0);
-}
-
-  function formatDate(value: string) {
-    return new Date(value).toLocaleString(
-      lang === "fr" ? "fr-FR" : lang === "en" ? "en-GB" : "pt-PT",
-      {
-        day: "2-digit",
-        month: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    );
+    }).format(Number.isFinite(amount) ? amount : 0);
   }
 
   if (!data && loading) {
     return (
-      <div className="bg-white rounded-[22px] p-8 shadow-sm text-slate-500">
+      <div className="rounded-[22px] bg-white p-8 text-slate-500 shadow-sm">
         {t("loading")}
       </div>
     );
@@ -196,37 +184,34 @@ export default function DashboardClient() {
             {t("dashboard")}
           </h1>
 
-          <p className="text-sm text-slate-500">
-            {t("dashboardOverview")}
-          </p>
+          <p className="text-sm text-slate-500">{t("dashboardOverview")}</p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={() => setEventsOpen(true)}
-            className="rounded-[14px] bg-[#123A5C] px-4 py-2.5 text-sm font-semibold text-white flex items-center gap-2"
+            className="flex items-center gap-2 rounded-[14px] bg-[#123A5C] px-4 py-2.5 text-sm font-semibold text-white"
           >
             <CalendarDays size={16} />
             {t("events")}
           </button>
 
           <button
-            onClick={() => setAdviceOpen(true)}
-            className="rounded-[14px] border border-[#123A5C] px-4 py-2.5 text-sm font-semibold text-[#123A5C] flex items-center gap-2 hover:bg-[#123A5C] hover:text-white"
+            type="button"
+            onClick={() => router.push("/conseil-gestion")}
+            className="flex items-center gap-2 rounded-[14px] border border-[#123A5C] px-4 py-2.5 text-sm font-semibold text-[#123A5C] hover:bg-[#123A5C] hover:text-white"
           >
             <BrainCircuit size={16} />
             {t("managementAdvice")}
           </button>
 
           <button
+            type="button"
             onClick={loadDashboard}
-            className="rounded-[14px] bg-white border px-4 py-2.5 text-sm font-semibold text-slate-700 flex items-center gap-2"
+            className="flex items-center gap-2 rounded-[14px] border bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
           >
-            <RefreshCw
-              size={16}
-              className={loading ? "animate-spin" : ""}
-            />
-
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
             {t("update")}
           </button>
         </div>
@@ -234,7 +219,7 @@ export default function DashboardClient() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <StatCard
               title={t("currentCash")}
               value={formatMoney(data.cards.cashBalance)}
@@ -253,9 +238,7 @@ export default function DashboardClient() {
               title={t("netProfit")}
               value={formatMoney(data.cards.netProfit)}
               icon={<TrendingUp size={20} />}
-              tone={
-                data.cards.netProfit >= 0 ? "green" : "red"
-              }
+              tone={data.cards.netProfit >= 0 ? "green" : "red"}
             />
 
             <StatCard
@@ -269,11 +252,7 @@ export default function DashboardClient() {
               title={t("potentialProfit")}
               value={formatMoney(data.cards.potentialProfit)}
               icon={<TrendingUp size={20} />}
-              tone={
-                data.cards.potentialProfit >= 0
-                  ? "green"
-                  : "red"
-              }
+              tone={data.cards.potentialProfit >= 0 ? "green" : "red"}
             />
 
             <StatCard
@@ -287,11 +266,7 @@ export default function DashboardClient() {
               title={t("lowStock")}
               value={data.cards.lowStockCount}
               icon={<AlertTriangle size={20} />}
-              tone={
-                data.cards.lowStockCount > 0
-                  ? "red"
-                  : "green"
-              }
+              tone={data.cards.lowStockCount > 0 ? "red" : "green"}
             />
 
             <StatCard
@@ -302,9 +277,9 @@ export default function DashboardClient() {
             />
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <div className="xl:col-span-2 bg-white rounded-[22px] p-4 shadow-sm border border-slate-100">
-              <div className="flex items-center justify-between mb-3">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="rounded-[22px] border border-slate-100 bg-white p-4 shadow-sm xl:col-span-2">
+              <div className="mb-3 flex items-center justify-between">
                 <h2 className="font-bold text-slate-800">
                   {t("salesEvolution")}
                 </h2>
@@ -314,33 +289,20 @@ export default function DashboardClient() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={data.monthlyChart}>
                     <CartesianGrid strokeDasharray="3 3" />
-
                     <XAxis dataKey="month" />
-
                     <YAxis />
-
                     <Tooltip
-                      formatter={(value) =>
-                        formatMoney(Number(value))
-                      }
+                      formatter={(value) => formatMoney(Number(value))}
                     />
-
-                    <Bar
-                      dataKey="vendas"
-                      name={t("sales")}
-                      fill="#123A5C"
-                    />
+                    <Bar dataKey="vendas" name={t("sales")} fill="#123A5C" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="bg-white rounded-[22px] p-4 shadow-sm border border-slate-100">
-              <div className="flex items-center gap-2 mb-4">
-                <Store
-                  size={18}
-                  className="text-[#123A5C]"
-                />
+            <div className="rounded-[22px] border border-slate-100 bg-white p-4 shadow-sm">
+              <div className="mb-4 flex items-center gap-2">
+                <Store size={18} className="text-[#123A5C]" />
 
                 <h2 className="font-bold text-slate-800">
                   {t("bestCantina")}
@@ -348,12 +310,10 @@ export default function DashboardClient() {
               </div>
 
               {data.bestCantina ? (
-                <div className="rounded-[20px] bg-[#123A5C]/5 border border-[#123A5C]/10 p-5">
-                  <p className="text-sm text-slate-500">
-                    {t("topMonth")}
-                  </p>
+                <div className="rounded-[20px] border border-[#123A5C]/10 bg-[#123A5C]/5 p-5">
+                  <p className="text-sm text-slate-500">{t("topMonth")}</p>
 
-                  <h3 className="text-xl font-black text-slate-800 mt-1">
+                  <h3 className="mt-1 text-xl font-black text-slate-800">
                     {data.bestCantina.name}
                   </h3>
 
@@ -361,36 +321,24 @@ export default function DashboardClient() {
                     {t("code")} {data.bestCantina.code}
                   </p>
 
-                  <p className="text-2xl font-black text-green-700 mt-4">
+                  <p className="mt-4 text-2xl font-black text-green-700">
                     {formatMoney(data.bestCantina.total)}
                   </p>
 
                   <p className="text-xs text-slate-500">
-                    {data.bestCantina.salesCount}{" "}
-                    {t("sales")}
+                    {data.bestCantina.salesCount} {t("sales")}
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">
-                  {t("noSales")}
-                </p>
+                <p className="text-sm text-slate-500">{t("noSales")}</p>
               )}
             </div>
           </div>
-
         </>
       )}
 
       {eventsOpen && (
-        <EventsCalendar
-          onClose={() => setEventsOpen(false)}
-        />
-      )}
-
-      {adviceOpen && (
-        <ManagementAdvice
-          onClose={() => setAdviceOpen(false)}
-        />
+        <EventsCalendar onClose={() => setEventsOpen(false)} />
       )}
     </div>
   );
@@ -414,56 +362,20 @@ function StatCard({
   };
 
   return (
-    <div className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-100 flex items-center gap-3 min-w-0">
+    <div className="flex min-w-0 items-center gap-3 rounded-[18px] border border-slate-100 bg-white p-4 shadow-sm">
       <div
-        className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 ${styles[tone]}`}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${styles[tone]}`}
       >
         {icon}
       </div>
 
       <div className="min-w-0">
-        <p className="text-xs text-slate-500 truncate">
-          {title}
-        </p>
+        <p className="truncate text-xs text-slate-500">{title}</p>
 
-        <p className="text-base xl:text-lg font-black text-slate-800 truncate">
+        <p className="truncate text-base font-black text-slate-800 xl:text-lg">
           {value}
         </p>
       </div>
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-white rounded-[22px] p-4 shadow-sm border border-slate-100 min-h-[250px]">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="text-[#123A5C]">
-          {icon}
-        </div>
-
-        <h2 className="font-bold text-slate-800">
-          {title}
-        </h2>
-      </div>
-
-      {children}
-    </div>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return (
-    <div className="rounded-[16px] bg-slate-50 p-5 text-center text-sm text-slate-500">
-      {text}
     </div>
   );
 }
