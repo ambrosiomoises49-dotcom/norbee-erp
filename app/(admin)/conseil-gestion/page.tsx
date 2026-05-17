@@ -1,14 +1,12 @@
-import type { ReactNode } from "react";
 import {
-  Brain,
   AlertTriangle,
+  Bot,
+  Brain,
+  CheckCircle2,
   Lightbulb,
-  TrendingUp,
-  Database,
+  Send,
   ShieldCheck,
   Target,
-  Send,
-  Bot,
   User,
 } from "lucide-react";
 
@@ -37,8 +35,8 @@ export default async function ConseilGestionPage() {
 
   if (!data?.success) {
     return (
-      <main className="min-h-[calc(100vh-110px)] bg-[#F4F7FA] p-3">
-        <div className="rounded-[18px] border border-red-100 bg-red-50 p-4 text-red-700">
+      <main className="min-h-[calc(100vh-110px)] bg-[#F4F7FA] p-4">
+        <div className="rounded-2xl border border-red-100 bg-red-50 p-5 text-sm font-semibold text-red-700">
           Impossible de charger l’IA.
         </div>
       </main>
@@ -50,254 +48,165 @@ export default async function ConseilGestionPage() {
   const recommendations = reasoning.recommendation_explanation || [];
   const priorities = reasoning.priority_explanation || [];
 
-  const alertCount = alerts.length;
-  const unreadAiMessages = alertCount + recommendations.length + priorities.length;
+  const unreadCount = alerts.length + recommendations.length + priorities.length;
 
   const healthLabel =
-    alertCount === 0 ? "Stable" : alertCount <= 2 ? "À surveiller" : "Risque élevé";
+    alerts.length === 0 ? "Stable" : alerts.length <= 2 ? "À surveiller" : "Risque élevé";
 
-  const healthClass =
-    alertCount === 0
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : alertCount <= 2
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : "border-red-200 bg-red-50 text-red-700";
-
-  const aiMessages = [
+  const messages = [
+    {
+      type: "analysis",
+      title: "Analyse générale",
+      text:
+        reasoning.main_explanation ||
+        "J’analyse actuellement les données de l’entreprise.",
+      meta: "Norbee IA · Maintenant",
+    },
+    {
+      type: "risk",
+      title: "Interprétation du risque",
+      text:
+        reasoning.risk_interpretation ||
+        "Aucune interprétation du risque disponible.",
+      meta: "Analyse stratégique",
+    },
     ...alerts.map((alert) => ({
-      role: "ai" as const,
-      tone: "danger" as const,
+      type: "alert",
       title: alert.title || "Alerte IA",
       text: alert.message || "Aucun détail disponible.",
       meta: `Niveau : ${alert.level || "medium"}`,
     })),
     ...priorities.map((priority) => ({
-      role: "ai" as const,
-      tone: "primary" as const,
+      type: "priority",
       title: priority.title || "Priorité IA",
       text: priority.reason || "Aucune explication disponible.",
       meta: "Priorité de gestion",
     })),
-    ...recommendations.map((recommendation) => ({
-      role: "ai" as const,
-      tone: "success" as const,
-      title: recommendation.recommendation || "Recommandation IA",
-      text: recommendation.reason || "Aucune explication disponible.",
+    ...recommendations.map((rec) => ({
+      type: "recommendation",
+      title: rec.recommendation || "Recommandation IA",
+      text: rec.reason || "Aucune explication disponible.",
       meta: "Conseil opérationnel",
     })),
   ];
 
   return (
-    <main className="min-h-[calc(100vh-110px)] bg-[#F4F7FA] p-3 md:p-4">
-      <div className="grid min-h-[calc(100vh-138px)] grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]">
-        <section className="space-y-3 overflow-hidden">
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_180px_145px_145px_145px]">
-            <div className="rounded-[18px] border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-[15px] bg-[#123A5C] text-white">
-                  <Brain size={23} />
-                </div>
-
-                <div>
-                  <h1 className="text-xl font-black text-slate-900">
-                    Conseil de Gestion IA
-                  </h1>
-                  <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wide text-[#123A5C]">
-                    Norbee Intelligence
-                  </p>
-                </div>
-              </div>
+    <main className="min-h-[calc(100vh-110px)] bg-[#F4F7FA] p-4">
+      <div className="grid min-h-[calc(100vh-142px)] grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="flex flex-col gap-3 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#123A5C] text-white">
+              <Brain size={25} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-black text-white">
+                  {unreadCount}
+                </span>
+              )}
             </div>
 
-            <CompactStatus
-              label="État entreprise"
-              value={healthLabel}
-              icon={<ShieldCheck size={17} />}
-              className={healthClass}
+            <div>
+              <h1 className="text-xl font-black leading-tight text-slate-900">
+                Conseil IA
+              </h1>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-[#123A5C]">
+                Norbee Intelligence
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+              État entreprise
+            </p>
+
+            <div className="mt-2 flex items-center gap-2">
+              <ShieldCheck size={18} className="text-[#123A5C]" />
+              <p className="text-lg font-black text-slate-900">{healthLabel}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <MiniMetric label="Alertes" value={alerts.length} />
+            <MiniMetric label="Priorités" value={priorities.length} />
+            <MiniMetric label="Conseils" value={recommendations.length} />
+          </div>
+
+          <div className="mt-2 space-y-2">
+            <SideItem
+              icon={<AlertTriangle size={15} />}
+              label="Alerte critique"
+              value={alerts[0]?.title || "Aucune alerte critique"}
+              danger={alerts.length > 0}
             />
 
-            <CompactMetric
-              title="Messages IA"
-              value={unreadAiMessages}
-              icon={<Bot size={17} />}
-              tone="primary"
+            <SideItem
+              icon={<Target size={15} />}
+              label="Priorité"
+              value={priorities[0]?.title || "Aucune priorité urgente"}
             />
 
-            <CompactMetric
-              title="Alertes"
-              value={alertCount}
-              icon={<AlertTriangle size={17} />}
-              tone={alertCount > 0 ? "danger" : "success"}
-            />
-
-            <CompactMetric
-              title="Priorités"
-              value={priorities.length}
-              icon={<Target size={17} />}
-              tone="neutral"
+            <SideItem
+              icon={<Lightbulb size={15} />}
+              label="Conseil principal"
+              value={recommendations[0]?.recommendation || "Aucun conseil urgent"}
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-            <div className="space-y-3 xl:col-span-7">
-              <Panel
-                title="Raisonnement principal"
-                icon={<TrendingUp size={17} />}
-              >
-                <ReasoningItem
-                  label="Analyse générale"
-                  text={
-                    reasoning.main_explanation ||
-                    "Aucun raisonnement principal disponible."
-                  }
-                />
-
-                <ReasoningItem
-                  label="Interprétation du risque"
-                  text={
-                    reasoning.risk_interpretation ||
-                    "Aucune interprétation du risque disponible."
-                  }
-                />
-
-                <ReasoningItem
-                  label="Contexte mémoire"
-                  text={
-                    reasoning.memory_context ||
-                    "Aucun contexte mémoire disponible."
-                  }
-                />
-              </Panel>
-
-              <Panel
-                title="Recommandations principales"
-                icon={<Lightbulb size={17} />}
-              >
-                {recommendations.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    {recommendations.slice(0, 4).map((item, index) => (
-                      <RecommendationCard
-                        key={`${item.recommendation || "recommendation"}-${index}`}
-                        title={item.recommendation || "Recommandation"}
-                        text={item.reason || "Aucune explication disponible."}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState text="Aucune recommandation disponible." />
-                )}
-              </Panel>
-            </div>
-
-            <div className="space-y-3 xl:col-span-5">
-              <Panel title="Alertes IA" icon={<AlertTriangle size={17} />}>
-                {alerts.length > 0 ? (
-                  <div className="space-y-2">
-                    {alerts.slice(0, 3).map((alert, index) => (
-                      <AlertCard
-                        key={`${alert.title || "alert"}-${index}`}
-                        title={alert.title || "Alerte IA"}
-                        message={alert.message || "Aucun détail disponible."}
-                        level={alert.level || "medium"}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState text="Aucune alerte IA détectée." />
-                )}
-              </Panel>
-
-              <Panel title="Priorités IA" icon={<Database size={17} />}>
-                {priorities.length > 0 ? (
-                  <div className="space-y-2">
-                    {priorities.slice(0, 3).map((item, index) => (
-                      <ActionCard
-                        key={`${item.title || "priority"}-${index}`}
-                        title={item.title || "Priorité"}
-                        text={item.reason || "Aucune explication disponible."}
-                        index={index + 1}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState text="Aucune priorité disponible." />
-                )}
-              </Panel>
-            </div>
+          <div className="mt-auto rounded-2xl border border-dashed border-slate-200 bg-white p-3">
+            <p className="text-xs font-black text-slate-800">
+              Prochaine étape
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              Activer le vrai chat conversationnel avec mémoire, questions libres et réponses en temps réel.
+            </p>
           </div>
-        </section>
+        </aside>
 
-        <aside className="flex min-h-[calc(100vh-138px)] flex-col rounded-[22px] border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 p-3">
+        <section className="flex min-h-[calc(100vh-142px)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div className="flex items-center gap-3">
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#123A5C]/10 text-[#123A5C]">
-                <Bot size={21} />
-                {unreadAiMessages > 0 && (
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-[#123A5C]/10 text-[#123A5C]">
+                <Bot size={23} />
+                {unreadCount > 0 && (
                   <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-black text-white">
-                    {unreadAiMessages}
+                    {unreadCount}
                   </span>
                 )}
               </div>
 
               <div>
-                <h2 className="text-base font-black text-slate-900">
+                <h2 className="text-lg font-black text-slate-900">
                   Messages IA
                 </h2>
-                <p className="text-[11px] text-slate-500">
-                  Conseils, alertes et recommandations.
+                <p className="text-xs text-slate-500">
+                  Alertes, recommandations et conseils de gestion.
                 </p>
               </div>
             </div>
 
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
               Actif
             </span>
-          </div>
+          </header>
 
-          <div className="flex-1 space-y-2 overflow-auto bg-[#EFEFEF] p-3">
-            <ChatBubble
-              role="ai"
-              title="Synthèse automatique"
-              text={
-                reasoning.main_explanation ||
-                "J’analyse actuellement les données de l’entreprise."
-              }
-              meta="Norbee IA"
-              tone="primary"
-            />
-
-            {aiMessages.length > 0 ? (
-              aiMessages.map((message, index) => (
-                <ChatBubble
+          <div className="flex-1 overflow-auto bg-[#F7F7F7] px-5 py-4">
+            <div className="mx-auto max-w-4xl space-y-3">
+              {messages.map((message, index) => (
+                <AiMessage
                   key={`${message.title}-${index}`}
-                  role={message.role}
+                  type={message.type}
                   title={message.title}
                   text={message.text}
                   meta={message.meta}
-                  tone={message.tone}
                 />
-              ))
-            ) : (
-              <ChatBubble
-                role="ai"
-                title="Aucune urgence"
-                text="Je n’ai détecté aucune alerte critique pour le moment."
-                meta="Norbee IA"
-                tone="success"
-              />
-            )}
+              ))}
 
-            <ChatBubble
-              role="user"
-              title="Moi"
-              text="Je pourrai bientôt poser des questions directement ici."
-              meta="Préparation du chat conversationnel"
-              tone="neutral"
-            />
+              <UserMessage text="Je pourrai bientôt poser une question directe ici, par exemple : quels produits dois-je acheter cette semaine ?" />
+            </div>
           </div>
 
-          <div className="border-t border-slate-100 bg-white p-3">
-            <div className="flex items-center gap-2 rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2">
+          <footer className="border-t border-slate-100 bg-white p-4">
+            <div className="mx-auto flex max-w-4xl items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
               <input
                 disabled
                 placeholder="Écris ta question à l’IA..."
@@ -307,238 +216,109 @@ export default async function ConseilGestionPage() {
               <button
                 type="button"
                 disabled
-                className="flex h-9 w-9 items-center justify-center rounded-[13px] bg-[#123A5C] text-white opacity-50"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#123A5C] text-white opacity-50"
               >
-                <Send size={16} />
+                <Send size={17} />
               </button>
             </div>
 
-            <p className="mt-2 text-center text-[10px] text-slate-400">
-              Le chat conversationnel sera connecté au moteur Norbee AI.
+            <p className="mt-2 text-center text-[11px] text-slate-400">
+              Chat conversationnel en préparation : mémoire ERP, analyse temps réel et réponses naturelles.
             </p>
-          </div>
-        </aside>
+          </footer>
+        </section>
       </div>
     </main>
   );
 }
 
-function CompactStatus({
+function MiniMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-2 text-center">
+      <p className="text-lg font-black text-slate-900">{value}</p>
+      <p className="text-[10px] font-semibold text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+function SideItem({
+  icon,
   label,
   value,
-  icon,
-  className,
+  danger,
 }: {
+  icon: React.ReactNode;
   label: string;
   value: string;
-  icon: ReactNode;
-  className: string;
+  danger?: boolean;
 }) {
   return (
-    <div className={`rounded-[18px] border p-3 shadow-sm ${className}`}>
-      <p className="text-[10px] font-bold uppercase tracking-wide">{label}</p>
-      <div className="mt-1 flex items-center gap-2">
-        {icon}
-        <p className="text-sm font-black">{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function CompactMetric({
-  title,
-  value,
-  icon,
-  tone,
-}: {
-  title: string;
-  value: number;
-  icon: ReactNode;
-  tone: "primary" | "success" | "danger" | "neutral";
-}) {
-  const toneClass = {
-    primary: "bg-[#123A5C]/10 text-[#123A5C]",
-    success: "bg-emerald-50 text-emerald-700",
-    danger: "bg-red-50 text-red-700",
-    neutral: "bg-slate-100 text-slate-700",
-  }[tone];
-
-  return (
-    <div className="rounded-[18px] border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-[11px] font-semibold text-slate-500">{title}</p>
-          <p className="text-lg font-black text-slate-900">{formatValue(value)}</p>
-        </div>
-
-        <div className={`flex h-9 w-9 items-center justify-center rounded-[12px] ${toneClass}`}>
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded-[18px] border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="mb-2.5 flex items-center gap-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-slate-100 text-[#123A5C]">
+    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+      <div className="flex items-center gap-2">
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-xl ${
+            danger ? "bg-red-50 text-red-600" : "bg-[#123A5C]/10 text-[#123A5C]"
+          }`}
+        >
           {icon}
         </div>
 
-        <h2 className="text-sm font-black text-slate-900">{title}</h2>
-      </div>
-
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-}
-
-function ReasoningItem({ label, text }: { label: string; text: string }) {
-  return (
-    <div className="rounded-[13px] border border-slate-100 bg-slate-50 p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-[#123A5C]">
-        {label}
-      </p>
-      <p className="mt-1 text-xs leading-relaxed text-slate-700">{text}</p>
-    </div>
-  );
-}
-
-function AlertCard({
-  title,
-  message,
-  level,
-}: {
-  title: string;
-  message: string;
-  level: string;
-}) {
-  return (
-    <div className="rounded-[13px] border border-red-100 bg-red-50 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-black text-red-800">{title}</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-red-700">
-            {message}
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+            {label}
           </p>
-        </div>
-
-        <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-red-700">
-          {level}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ActionCard({
-  title,
-  text,
-  index,
-}: {
-  title: string;
-  text: string;
-  index: number;
-}) {
-  return (
-    <div className="flex gap-2 rounded-[13px] border border-slate-100 bg-slate-50 p-3">
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#123A5C] text-[10px] font-black text-white">
-        {index}
-      </div>
-
-      <div>
-        <p className="text-xs font-black text-slate-800">{title}</p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">
-          {text}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function RecommendationCard({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-[13px] border border-amber-100 bg-amber-50 p-3">
-      <div className="flex items-start gap-2">
-        <Lightbulb className="mt-0.5 text-amber-700" size={14} />
-        <div>
-          <p className="text-xs font-black text-slate-900">{title}</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-700">
-            {text}
-          </p>
+          <p className="truncate text-xs font-black text-slate-800">{value}</p>
         </div>
       </div>
     </div>
   );
 }
 
-function ChatBubble({
-  role,
+function AiMessage({
+  type,
   title,
   text,
   meta,
-  tone,
 }: {
-  role: "ai" | "user";
+  type: string;
   title: string;
   text: string;
   meta: string;
-  tone: "primary" | "success" | "danger" | "neutral";
 }) {
-  const isAi = role === "ai";
-
-  const toneClass = {
-    primary: "border-slate-200 bg-white text-slate-800",
-    success: "border-emerald-100 bg-emerald-50 text-emerald-800",
-    danger: "border-red-100 bg-red-50 text-red-800",
-    neutral: "border-[#123A5C] bg-[#123A5C] text-white",
-  }[tone];
+  const styles = {
+    analysis: "border-slate-200 bg-white text-slate-800",
+    risk: "border-amber-100 bg-amber-50 text-amber-900",
+    alert: "border-red-100 bg-red-50 text-red-800",
+    priority: "border-blue-100 bg-blue-50 text-blue-900",
+    recommendation: "border-emerald-100 bg-emerald-50 text-emerald-900",
+  }[type] || "border-slate-200 bg-white text-slate-800";
 
   return (
-    <div className={`flex gap-2 ${isAi ? "justify-start" : "justify-end"}`}>
-      {isAi && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#123A5C]/10 text-[#123A5C]">
-          <Bot size={15} />
-        </div>
-      )}
-
-      <div className={`max-w-[86%] rounded-[16px] border px-3 py-2 shadow-sm ${toneClass}`}>
-        <p className="text-xs font-black">{title}</p>
-        <p className="mt-1 text-xs leading-relaxed">{text}</p>
-        <p className={`mt-1 text-[10px] ${isAi ? "text-slate-400" : "text-white/70"}`}>
-          {meta}
-        </p>
+    <div className="flex items-start gap-3">
+      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#123A5C]/10 text-[#123A5C]">
+        <Bot size={16} />
       </div>
 
-      {!isAi && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600">
-          <User size={15} />
-        </div>
-      )}
+      <div className={`max-w-[82%] rounded-2xl border px-4 py-3 shadow-sm ${styles}`}>
+        <p className="text-sm font-black">{title}</p>
+        <p className="mt-1 text-sm leading-relaxed">{text}</p>
+        <p className="mt-2 text-[11px] opacity-60">{meta}</p>
+      </div>
     </div>
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+function UserMessage({ text }: { text: string }) {
   return (
-    <div className="rounded-[13px] border border-slate-100 bg-slate-50 p-3 text-center text-xs text-slate-500">
-      {text}
+    <div className="flex justify-end gap-3">
+      <div className="max-w-[78%] rounded-2xl bg-[#123A5C] px-4 py-3 text-white shadow-sm">
+        <p className="text-sm font-black">Moi</p>
+        <p className="mt-1 text-sm leading-relaxed">{text}</p>
+      </div>
+
+      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600">
+        <User size={16} />
+      </div>
     </div>
   );
-}
-
-function formatValue(value: number) {
-  return new Intl.NumberFormat("pt-PT", {
-    maximumFractionDigits: 0,
-  }).format(value);
 }
