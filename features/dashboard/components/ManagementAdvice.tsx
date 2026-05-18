@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BrainCircuit } from "lucide-react";
+import { BrainCircuit, Loader2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 type MlDashboardResponse = {
@@ -25,10 +25,13 @@ export default function ManagementAdviceButton() {
   const { t } = useI18n();
 
   const [aiUnreadCount, setAiUnreadCount] = useState(0);
+  const [loadingCount, setLoadingCount] = useState(true);
 
   useEffect(() => {
     async function loadAiCount() {
       try {
+        setLoadingCount(true);
+
         const response = await fetch("/api/ai/ml-dashboard", {
           cache: "no-store",
         });
@@ -49,6 +52,8 @@ export default function ManagementAdviceButton() {
         setAiUnreadCount(proactiveCount + executiveCount + fraudCount);
       } catch {
         setAiUnreadCount(0);
+      } finally {
+        setLoadingCount(false);
       }
     }
 
@@ -62,9 +67,13 @@ export default function ManagementAdviceButton() {
       className="relative flex w-full items-center gap-3 rounded-[16px] px-4 py-3 hover:bg-slate-100"
     >
       <div className="relative">
-        <BrainCircuit size={22} />
+        {loadingCount ? (
+          <Loader2 size={22} className="animate-spin text-[#123A5C]" />
+        ) : (
+          <BrainCircuit size={22} />
+        )}
 
-        {aiUnreadCount > 0 && (
+        {!loadingCount && aiUnreadCount > 0 && (
           <span className="absolute -right-3 -top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-black text-white">
             {aiUnreadCount > 99 ? "99+" : aiUnreadCount}
           </span>
@@ -72,6 +81,12 @@ export default function ManagementAdviceButton() {
       </div>
 
       <span className="font-semibold">{t("managementAdvice")}</span>
+
+      {loadingCount && (
+        <span className="ml-auto text-[11px] font-semibold text-slate-400">
+          Analyse...
+        </span>
+      )}
     </button>
   );
 }
