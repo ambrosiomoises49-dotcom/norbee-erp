@@ -6,14 +6,21 @@ export async function GET() {
   try {
     const session = await requireAdmin();
 
-    const aiUrl =
-      process.env.NORBEE_AI_URL || "http://127.0.0.1:8000";
+    const aiUrl = process.env.NORBEE_AI_URL;
+    const apiKey = process.env.NORBEE_AI_API_KEY;
 
-    const apiKey =
-      process.env.NORBEE_AI_API_KEY || "";
+    if (!aiUrl || !apiKey) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Norbee AI não está configurada.",
+        },
+        { status: 500 }
+      );
+    }
 
     const response = await fetch(
-      `${aiUrl}/api/ai/company-ml-analysis/${session.companyId}?days=30&periods=7`,
+      `${aiUrl}/api/ai/company-ml-analysis/${session.companyId}?days=30&periods=30`,
       {
         cache: "no-store",
         headers: {
@@ -24,7 +31,7 @@ export async function GET() {
 
     const data = await response.json();
 
-    if (!response.ok) {
+    if (!response.ok || data.status === "not_found") {
       return NextResponse.json(
         {
           success: false,

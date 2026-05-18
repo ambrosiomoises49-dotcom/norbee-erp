@@ -6,13 +6,36 @@ import { buildAiDashboardData } from "@/lib/ai/erp-ai";
 async function getAiDashboard() {
   try {
     const session = await requireAdmin();
-    const data = await buildAiDashboardData(session.companyId);
+
+    const legacyData = await buildAiDashboardData(session.companyId);
+
+    const aiUrl = process.env.NORBEE_AI_URL;
+    const apiKey = process.env.NORBEE_AI_API_KEY;
+
+    let advancedData = null;
+
+    if (aiUrl && apiKey) {
+      const response = await fetch(
+        `${aiUrl}/api/ai/company-ml-analysis/${session.companyId}?days=30&periods=30`,
+        {
+          cache: "no-store",
+          headers: {
+            "x-api-key": apiKey,
+          },
+        }
+      );
+
+      if (response.ok) {
+        advancedData = await response.json();
+      }
+    }
 
     return {
       success: true,
-      alerts: data.alerts,
-      reasoning: data.reasoning,
-      memorySummary: data.memory_summary,
+      alerts: legacyData.alerts || [],
+      reasoning: legacyData.reasoning,
+      memorySummary: legacyData.memory_summary,
+      advancedData,
     };
   } catch (error) {
     console.error("ERRO PAGE IA:", error);
@@ -39,6 +62,7 @@ export default async function ConseilGestionPage() {
       priorities={data.reasoning.priority_explanation || []}
       recommendations={data.reasoning.recommendation_explanation || []}
       reasoning={data.reasoning}
+      advancedData={data.advancedData}
     />
   );
 }
