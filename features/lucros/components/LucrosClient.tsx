@@ -292,7 +292,7 @@ export default function LucrosClient() {
             <StatCard
               title={t("costsAndSalaries")}
               value={formatMoney(
-                summary.transport + summary.salaries + summary.otherCosts
+                summary.transport + summary.salaries + summary.otherCosts 
               )}
               icon={<TrendingDown size={20} />}
               tone="red"

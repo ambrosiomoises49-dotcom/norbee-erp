@@ -163,25 +163,36 @@ export async function GET(req: Request) {
         const value = Number(cost.amount || 0);
 
         if (
-          name.includes("transporte") ||
-          name.includes("transport")
-        ) {
-          transport += value;
-        } else if (
-          name.includes("salario") ||
-          name.includes("salário") ||
-          name.includes("salary")
-        ) {
-          salaries += value;
-        } else {
-          otherCosts += value;
-        }
+  name.includes("transporte") ||
+  name.includes("transport")
+) {
+  transport += value;
+
+} else if (
+  name.includes("salario") ||
+  name.includes("salário") ||
+  name.includes("salary")
+) {
+  salaries += value;
+
+} else if (
+  name.includes("mercadoria") ||
+  name.includes("achat stock") ||
+  name.includes("achat marchandises") ||
+  name.includes("purchase") ||
+  name.includes("stock")
+) {
+  // ignorer achat marchandises
+}
+else {
+  otherCosts += value;
+}
       });
 
       const grossProfit = totalSales - merchandiseCost;
 
       const netProfit =
-        grossProfit - transport - salaries - otherCosts;
+        grossProfit - transport - salaries - otherCosts ;
 
       const margin =
         totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
