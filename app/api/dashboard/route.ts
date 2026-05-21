@@ -247,7 +247,7 @@ export async function GET() {
 
     const grossProfit = salesMonthTotal - merchandiseCost;
 
-    const netProfit = grossProfit - costsMonthTotal;
+    const netProfit = grossProfit - costsMonthTotal + merchandiseCost;
 
     const stockValue = centralStocks.reduce(
       (sum: number, stock: CentralStockRow) =>
