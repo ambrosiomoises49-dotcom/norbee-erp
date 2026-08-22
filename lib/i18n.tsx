@@ -2318,7 +2318,17 @@ from: {
   fr: "De",
   en: "From",
 },
+details: {
+  pt: "Detalhes",
+  fr: "Détails",
+  en: "Details",
+},
 
+view: {
+  pt: "Ver",
+  fr: "Voir",
+  en: "View",
+},
 until: {
   pt: "Até",
   fr: "Jusqu’à",

@@ -1097,6 +1097,7 @@ export default function VendasClient() {
                     <th className="px-4 py-3 text-left">{t("payment")}</th>
                     <th className="px-4 py-3 text-right">{t("total")}</th>
                     <th className="px-4 py-3 text-center">{t("items")}</th>
+                     <th className="px-4 py-3 text-center">{t("details")}</th>
                   </tr>
                 </thead>
 
@@ -1104,7 +1105,7 @@ export default function VendasClient() {
                   {reportSales.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="py-10 text-center text-slate-500"
                       >
                         {t("noSalesFound")}
@@ -1124,6 +1125,15 @@ export default function VendasClient() {
                         <td className="px-4 py-3 text-center">
                           {sale.items?.length || 0}
                         </td>
+                        <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/facturas/${sale.id}`)}
+                          className="rounded-xl bg-[#123A5C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0B2540]"
+                        >
+                          {t("view")}
+                        </button>
+                      </td>
                       </tr>
                     ))
                   )}
