@@ -302,6 +302,7 @@ export default function ComprasClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          receiveNow: form.status === "RECEIVED",
           items: lines.map((line) => ({
             productId: line.productId,
             quantity: Number(line.quantity || 0),

@@ -221,6 +221,10 @@ export async function POST(request: Request) {
         }
 
         return createdTransfer;
+      },
+      {
+        maxWait: 10_000,
+        timeout: 60_000,
       }
     );
 

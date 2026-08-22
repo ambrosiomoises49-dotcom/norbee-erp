@@ -119,6 +119,7 @@ type ViewMode = "overview" | "daily" | "monthly" | "report";
 const REPORT_ITEMS_PER_PAGE = 4;
 const MONTH_ITEMS_PER_PAGE = 6;
 const STOCK_TX_PER_PAGE = 7;
+const STOCK_PRODUCTS_PER_PAGE = 15;
 
 export default function CantinaDetailsClient({ id }: { id: string }) {
   const router = useRouter();
@@ -129,6 +130,8 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const [currency, setCurrency] = useState("EUR");
   const [viewMode, setViewMode] = useState<ViewMode>("overview");
   const [stockTransactionsOpen, setStockTransactionsOpen] = useState(false);
+  const [stockProductsOpen, setStockProductsOpen] = useState(false);
+  const [stockProductsPage, setStockProductsPage] = useState(1);
 
   const [dailyPage, setDailyPage] = useState<1 | 2>(1);
   const [reportStart, setReportStart] = useState("");
@@ -208,6 +211,41 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const costs = cantina?.costs || [];
   const employees = cantina?.employees || [];
   const stocks = cantina?.cantinaStocks || [];
+  const stockWithTransfers = useMemo(() => {
+  return stocks.map((line) => {
+    const totalTransferred = (cantina?.stockMovements || [])
+      .filter(
+        (movement) =>
+          movement.type === "TRANSFER_IN" &&
+          movement.product?.internalCode ===
+            line.product?.internalCode
+      )
+      .reduce(
+        (sum, movement) =>
+          sum + Number(movement.quantity || 0),
+        0
+      );
+
+    return {
+      ...line,
+      totalTransferred,
+      remainingQuantity: Number(line.quantity || 0),
+    };
+  });
+}, [cantina, stocks]);
+
+const stockProductsTotalPages = Math.max(
+  1,
+  Math.ceil(
+    stockWithTransfers.length / STOCK_PRODUCTS_PER_PAGE
+  )
+);
+
+const paginatedStockProducts = stockWithTransfers.slice(
+  (stockProductsPage - 1) * STOCK_PRODUCTS_PER_PAGE,
+  stockProductsPage * STOCK_PRODUCTS_PER_PAGE
+);
+  
 
   const totalSales = sales.reduce(
     (sum, sale) => sum + Number(sale.totalAmount || 0),
@@ -271,25 +309,44 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const visibleDays = dailyPage === 1 ? days.slice(0, 16) : days.slice(16);
 
   const monthlyRows = Array.from({ length: 12 }, (_, index) => {
-    const monthSales = sales.filter(
-      (sale) => new Date(sale.createdAt).getMonth() === index
-    );
+  const monthSales = sales.filter(
+    (sale) => new Date(sale.createdAt).getMonth() === index
+  );
 
-    const values = monthSales.map((sale) => Number(sale.totalAmount || 0));
-    const total = values.reduce((a, b) => a + b, 0);
+  const values = monthSales.map((sale) => Number(sale.totalAmount || 0));
+  const total = values.reduce((a, b) => a + b, 0);
 
-    return {
-      month: new Date(currentYear, index).toLocaleString(locale(), {
-        month: "long",
-      }),
-      total,
-      max: values.length ? Math.max(...values) : 0,
-      min: values.length ? Math.min(...values) : 0,
-      average: values.length ? total / values.length : 0,
-      salesCount: values.length,
-      growth: 0,
-    };
-  });
+  const previousMonthSales =
+    index > 0
+      ? sales.filter(
+          (sale) => new Date(sale.createdAt).getMonth() === index - 1
+        )
+      : [];
+
+  const previousMonthTotal = previousMonthSales.reduce(
+    (sum, sale) => sum + Number(sale.totalAmount || 0),
+    0
+  );
+
+  let growth = 0;
+
+  if (index > 0 && previousMonthTotal > 0) {
+    growth =
+      ((total - previousMonthTotal) / previousMonthTotal) * 100;
+  }
+
+  return {
+    month: new Date(currentYear, index).toLocaleString(locale(), {
+      month: "long",
+    }),
+    total,
+    max: values.length ? Math.max(...values) : 0,
+    min: values.length ? Math.min(...values) : 0,
+    average: values.length ? total / values.length : 0,
+    salesCount: values.length,
+    growth: Number(growth.toFixed(2)),
+  };
+});
 
   const monthlyTotalPages = Math.max(
     1,
@@ -518,11 +575,20 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
               title={t("costs")}
               value={cantina._count?.costs || 0}
             />
-            <SmallCard
-              icon={<Boxes size={20} />}
-              title={t("stock")}
-              value={cantina._count?.cantinaStocks || 0}
-            />
+            <button
+                type="button"
+                onClick={() => {
+                  setStockProductsPage(1);
+                  setStockProductsOpen(true);
+                }}
+                className="text-left"
+              >
+                <SmallCard
+                  icon={<Boxes size={20} />}
+                  title={t("stock")}
+                  value={cantina._count?.cantinaStocks || 0}
+                />
+          </button>
             <SmallCard
               icon={<TrendingUp size={20} />}
               title={t("totalSold")}
@@ -805,7 +871,18 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
                     <td className="px-4 py-2">{formatMoney(row.min)}</td>
                     <td className="px-4 py-2">{formatMoney(row.average)}</td>
                     <td className="px-4 py-2">{row.salesCount}</td>
-                    <td className="px-4 py-2">{row.growth}%</td>
+                    <td
+                        className={`px-4 py-2 font-semibold ${
+                        row.growth > 0
+                       ? "text-green-600"
+                        : row.growth < 0
+                        ? "text-red-600"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {row.growth > 0 ? "+" : ""}
+                      {row.growth.toFixed(2)}%
+                    </td>
                     <td className="px-4 py-2">
                       <button
                         onClick={() => downloadMonthlyReport(row.month)}
@@ -832,6 +909,136 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
           />
         </FullPanel>
       )}
+      {stockProductsOpen && (
+  <div className="fixed left-[200px] top-[110px] right-0 bottom-0 z-40 bg-[#F4F7FA] p-5 overflow-hidden">
+    <div className="h-full bg-white rounded-[24px] shadow-xl flex flex-col overflow-hidden">
+
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">
+            {t("cantinaStock")}
+          </h2>
+
+          <p className="text-sm text-slate-500 mt-1">
+            {cantina.name} — {cantina.code}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setStockProductsOpen(false)}
+          className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800"
+        >
+          <X size={24} />
+        </button>
+      </div>
+
+      <div className="flex-1 p-6 overflow-auto">
+        {stockWithTransfers.length === 0 ? (
+          <Empty
+            icon={<Boxes size={46} />}
+            text={t("noStockProduct")}
+          />
+        ) : (
+          <>
+            <div className="overflow-x-auto rounded-[18px] border">
+              <table className="w-full min-w-[850px] text-left text-sm">
+
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-5 py-4">
+                      {t("product")}
+                    </th>
+
+                    <th className="px-5 py-4">
+                      {t("code")}
+                    </th>
+
+                    <th className="px-5 py-4 text-right">
+                      {t("totalTransferred")}
+                    </th>
+
+                    <th className="px-5 py-4 text-right">
+                      {t("remainingQuantity")}
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedStockProducts.map((line) => (
+                    <tr
+                      key={line.id}
+                      className="hover:bg-slate-50"
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+
+                          <div className="w-9 h-9 rounded-[12px] bg-[#123A5C]/10 flex items-center justify-center">
+                            <Boxes
+                              size={17}
+                              className="text-[#123A5C]"
+                            />
+                          </div>
+
+                          <span className="font-semibold text-slate-800">
+                            {line.product?.name ||
+                              t("unknownProduct")}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4 text-slate-500">
+                        {line.product?.internalCode || "-"}
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <span className="font-bold text-[#123A5C]">
+                          {line.totalTransferred}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <span
+                          className={`inline-flex min-w-[70px] justify-center rounded-full px-3 py-1.5 text-sm font-bold ${
+                            line.remainingQuantity > 0
+                              ? "bg-green-50 text-green-700"
+                              : "bg-red-50 text-red-600"
+                          }`}
+                        >
+                          {line.remainingQuantity}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+
+              </table>
+            </div>
+
+            <Pagination
+              page={stockProductsPage}
+              totalPages={stockProductsTotalPages}
+              t={t}
+              onPrev={() =>
+                setStockProductsPage((page) =>
+                  Math.max(1, page - 1)
+                )
+              }
+              onNext={() =>
+                setStockProductsPage((page) =>
+                  Math.min(
+                    stockProductsTotalPages,
+                    page + 1
+                  )
+                )
+              }
+            />
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
       {stockTransactionsOpen && (
         <div className="fixed left-[200px] top-[110px] right-0 bottom-0 z-40 bg-[#F4F7FA] p-5 overflow-hidden">

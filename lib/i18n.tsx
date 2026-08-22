@@ -2265,6 +2265,23 @@ Margin: {
   fr: "Centre d’analyse : ventes, achats, stock, coûts, finances, RH, bénéfices et cantines.",
   en: "Analysis center: sales, purchases, stock, costs, finance, HR, profits and canteens.",
 },
+cantinaStock: {
+  pt: "Stock da cantina",
+  fr: "Stock de la cantine",
+  en: "Canteen stock",
+},
+
+totalTransferred: {
+  pt: "Quantidade total transferida",
+  fr: "Quantité totale transférée",
+  en: "Total quantity transferred",
+},
+
+remainingQuantity: {
+  pt: "Quantidade restante",
+  fr: "Quantité restante",
+  en: "Remaining quantity",
+},
 
 export: {
   pt: "Exportar",
