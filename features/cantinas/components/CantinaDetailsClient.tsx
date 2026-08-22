@@ -119,7 +119,7 @@ type ViewMode = "overview" | "daily" | "monthly" | "report";
 const REPORT_ITEMS_PER_PAGE = 4;
 const MONTH_ITEMS_PER_PAGE = 6;
 const STOCK_TX_PER_PAGE = 7;
-const STOCK_PRODUCTS_PER_PAGE = 15;
+const STOCK_PRODUCTS_PER_PAGE = 10;
 
 export default function CantinaDetailsClient({ id }: { id: string }) {
   const router = useRouter();
@@ -139,6 +139,7 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const [reportPage, setReportPage] = useState(1);
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [stockTxPage, setStockTxPage] = useState(1);
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
   async function loadCompanyCurrency() {
   try {
@@ -308,20 +309,75 @@ const paginatedStockProducts = stockWithTransfers.slice(
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const visibleDays = dailyPage === 1 ? days.slice(0, 16) : days.slice(16);
 
-  const monthlyRows = Array.from({ length: 12 }, (_, index) => {
-  const monthSales = sales.filter(
-    (sale) => new Date(sale.createdAt).getMonth() === index
+const monthlyRows = Array.from({ length: 12 }, (_, index) => {
+  // Vendas exclusivamente deste mês E deste ano
+  const monthSales = sales.filter((sale) => {
+    const saleDate = new Date(sale.createdAt);
+
+    return (
+      saleDate.getFullYear() === currentYear &&
+      saleDate.getMonth() === index
+    );
+  });
+
+  // Total vendido no mês
+  const total = monthSales.reduce(
+    (sum, sale) => sum + Number(sale.totalAmount || 0),
+    0
   );
 
-  const values = monthSales.map((sale) => Number(sale.totalAmount || 0));
-  const total = values.reduce((a, b) => a + b, 0);
+  // Agrupar as vendas por dia
+  const dailyTotals = new Map<number, number>();
 
-  const previousMonthSales =
-    index > 0
-      ? sales.filter(
-          (sale) => new Date(sale.createdAt).getMonth() === index - 1
-        )
-      : [];
+  monthSales.forEach((sale) => {
+    const saleDate = new Date(sale.createdAt);
+    const day = saleDate.getDate();
+
+    dailyTotals.set(
+      day,
+      (dailyTotals.get(day) || 0) +
+        Number(sale.totalAmount || 0)
+    );
+  });
+
+  // Totais de cada dia que teve vendas
+  const dailyValues = Array.from(dailyTotals.values());
+
+  // Melhor dia do mês
+  const max =
+    dailyValues.length > 0
+      ? Math.max(...dailyValues)
+      : 0;
+
+  // Pior dia do mês ENTRE OS DIAS QUE TIVERAM VENDAS
+  const min =
+    dailyValues.length > 0
+      ? Math.min(...dailyValues)
+      : 0;
+
+  // Média de vendas por dia ativo
+  const average =
+    dailyValues.length > 0
+      ? total / dailyValues.length
+      : 0;
+
+  // Mês anterior, também isolado por ano
+  let previousYear = currentYear;
+  let previousMonth = index - 1;
+
+  if (previousMonth < 0) {
+    previousMonth = 11;
+    previousYear = currentYear - 1;
+  }
+
+  const previousMonthSales = sales.filter((sale) => {
+    const saleDate = new Date(sale.createdAt);
+
+    return (
+      saleDate.getFullYear() === previousYear &&
+      saleDate.getMonth() === previousMonth
+    );
+  });
 
   const previousMonthTotal = previousMonthSales.reduce(
     (sum, sale) => sum + Number(sale.totalAmount || 0),
@@ -330,20 +386,26 @@ const paginatedStockProducts = stockWithTransfers.slice(
 
   let growth = 0;
 
-  if (index > 0 && previousMonthTotal > 0) {
+  if (previousMonthTotal > 0) {
     growth =
-      ((total - previousMonthTotal) / previousMonthTotal) * 100;
+      ((total - previousMonthTotal) /
+        previousMonthTotal) *
+      100;
   }
 
   return {
-    month: new Date(currentYear, index).toLocaleString(locale(), {
-      month: "long",
-    }),
+    month: new Date(currentYear, index).toLocaleString(
+      locale(),
+      {
+        month: "long",
+      }
+    ),
+
     total,
-    max: values.length ? Math.max(...values) : 0,
-    min: values.length ? Math.min(...values) : 0,
-    average: values.length ? total / values.length : 0,
-    salesCount: values.length,
+    max,
+    min,
+    average,
+    salesCount: monthSales.length,
     growth: Number(growth.toFixed(2)),
   };
 });
@@ -750,6 +812,7 @@ const paginatedStockProducts = stockWithTransfers.slice(
                       <th className="px-4 py-3">{t("method")}</th>
                       <th className="px-4 py-3">{t("total")}</th>
                       <th className="px-4 py-3">{t("items")}</th>
+                      <th className="px-4 py-3">{t("details")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -764,6 +827,15 @@ const paginatedStockProducts = stockWithTransfers.slice(
                           {formatMoney(sale.totalAmount)}
                         </td>
                         <td className="px-4 py-3">{sale.items?.length || 0}</td>
+                        <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSale(sale)}
+                          className="rounded-xl bg-[#123A5C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0B2540]"
+                        >
+                          {t("view")}
+                        </button>
+                      </td>
                       </tr>
                     ))}
                   </tbody>
@@ -812,9 +884,15 @@ const paginatedStockProducts = stockWithTransfers.slice(
 
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
             {visibleDays.map((day) => {
-              const daySales = sales.filter(
-                (sale) => new Date(sale.createdAt).getDate() === day
-              );
+              const daySales = sales.filter((sale) => {
+              const saleDate = new Date(sale.createdAt);
+
+                return (
+                  saleDate.getFullYear() === currentYear &&
+                  saleDate.getMonth() === currentMonth &&
+                  saleDate.getDate() === day
+                );
+              });
               const total = daySales.reduce(
                 (sum, sale) => sum + Number(sale.totalAmount || 0),
                 0
@@ -1035,6 +1113,127 @@ const paginatedStockProducts = stockWithTransfers.slice(
             />
           </>
         )}
+      </div>
+    </div>
+  </div>
+)}
+{selectedSale && (
+  <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6">
+    <div className="bg-white rounded-[24px] shadow-xl w-full max-w-4xl p-6 overflow-auto max-h-[90vh]">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">
+            {t("saleDetails")}
+          </h2>
+
+          <p className="text-sm text-slate-500 mt-1">
+            {selectedSale.saleNumber}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setSelectedSale(null)}
+          className="p-2 rounded-xl hover:bg-slate-100"
+        >
+          <X size={22} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5">
+        <div className="rounded-[16px] bg-slate-50 p-4">
+          <p className="text-xs text-slate-500">{t("date")}</p>
+
+          <p className="font-semibold mt-1">
+            {new Date(selectedSale.createdAt).toLocaleDateString(locale())}
+          </p>
+        </div>
+
+        <div className="rounded-[16px] bg-slate-50 p-4">
+          <p className="text-xs text-slate-500">{t("hour")}</p>
+
+          <p className="font-semibold mt-1">
+            {new Date(selectedSale.createdAt).toLocaleTimeString(locale(), {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
+          </p>
+        </div>
+
+        <div className="rounded-[16px] bg-slate-50 p-4">
+          <p className="text-xs text-slate-500">{t("method")}</p>
+
+          <p className="font-semibold mt-1">
+            {selectedSale.paymentMethod}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 overflow-x-auto rounded-[18px] border">
+        <table className="w-full min-w-[700px] text-sm">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              <th className="px-4 py-3 text-left">
+                {t("product")}
+              </th>
+
+              <th className="px-4 py-3 text-right">
+                {t("qty")}
+              </th>
+
+              <th className="px-4 py-3 text-right">
+                {t("unitPrice")}
+              </th>
+
+              <th className="px-4 py-3 text-right">
+                {t("total")}
+              </th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y">
+            {(selectedSale.items || []).map((item) => {
+              const totalPrice = Number(item.totalPrice || 0);
+              const unitPrice =
+                item.quantity > 0
+                  ? totalPrice / item.quantity
+                  : 0;
+
+              return (
+                <tr key={item.id}>
+                  <td className="px-4 py-3 font-semibold">
+                    {item.product?.name || t("unknownProduct")}
+                  </td>
+
+                  <td className="px-4 py-3 text-right">
+                    {item.quantity}
+                  </td>
+
+                  <td className="px-4 py-3 text-right">
+                    {formatMoney(unitPrice)}
+                  </td>
+
+                  <td className="px-4 py-3 text-right font-bold text-[#123A5C]">
+                    {formatMoney(totalPrice)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-5 flex justify-end">
+        <div className="rounded-[18px] bg-[#123A5C] px-6 py-4 text-white min-w-[260px]">
+          <p className="text-xs text-white/70">
+            {t("total")}
+          </p>
+
+          <p className="text-2xl font-black mt-1">
+            {formatMoney(selectedSale.totalAmount)}
+          </p>
+        </div>
       </div>
     </div>
   </div>

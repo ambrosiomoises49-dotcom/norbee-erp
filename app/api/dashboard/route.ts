@@ -270,18 +270,22 @@ export async function GET() {
       0
     );
 
-    const lowStockRows = lowStocks
-      .filter(
-        (stock: CentralStockRow) =>
-          stock.quantity <= stock.product.minStock
-      )
-      .map((stock: CentralStockRow) => ({
-        id: stock.id,
-        productName: stock.product.name,
-        quantity: stock.quantity,
-        minStock: stock.product.minStock,
-      }))
-      .slice(0, 5);
+    const allLowStockRows = lowStocks
+  .filter(
+    (stock: CentralStockRow) =>
+      Number(stock.quantity || 0) <=
+      Number(stock.product.minStock || 0)
+  )
+  .map((stock: CentralStockRow) => ({
+    id: stock.id,
+    productName: stock.product.name,
+    quantity: Number(stock.quantity || 0),
+    minStock: Number(stock.product.minStock || 0),
+  }));
+
+const lowStockRows = allLowStockRows.slice(0, 5);
+
+const lowStockCount = allLowStockRows.length;
 
     const cantinaRanking = cantinas
       .map((cantina: CantinaRow) => {
@@ -341,7 +345,7 @@ export async function GET() {
         stockValue,
         potentialProfit,
         netProfit,
-        lowStockCount: lowStockRows.length,
+        lowStockCount: lowStockCount,
         activeEmployees: employees.filter(
           (e: EmployeeRow) => e.status === "ACTIVE"
         ).length,
