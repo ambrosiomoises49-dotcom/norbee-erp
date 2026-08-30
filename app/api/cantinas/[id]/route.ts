@@ -96,11 +96,155 @@ export async function GET(
       },
     });
 
+    /*
+ * ============================================================
+ * STOCK PARADO / DIAS SEM VENDA
+ *
+ * Esta lógica é apenas informativa.
+ * Não altera stock, FIFO, vendas ou movimentos.
+ * ============================================================
+ */
+
+const now = new Date();
+
+/*
+ * Última venda conhecida por produto.
+ *
+ * Percorremos as vendas apenas UMA vez e criamos um Map.
+ * Como as vendas já vêm ordenadas por createdAt desc,
+ * guardamos apenas a primeira ocorrência de cada produto.
+ */
+const lastSaleByProduct = new Map<string, Date>();
+
+for (const sale of cantina.sales) {
+  for (const item of sale.items) {
+    if (!lastSaleByProduct.has(item.productId)) {
+      lastSaleByProduct.set(
+        item.productId,
+        new Date(sale.createdAt)
+      );
+    }
+  }
+}
+
+/*
+ * Última entrada de stock por produto.
+ *
+ * Como stockMovements também está ordenado desc,
+ * guardamos apenas a primeira entrada encontrada.
+ */
+const lastStockInByProduct = new Map<string, Date>();
+
+const stockInTypes = new Set([
+  "PURCHASE_IN",
+  "TRANSFER_IN",
+  "ADJUSTMENT_IN",
+  "RETURN",
+]);
+
+for (const movement of stockMovements) {
+  if (
+    stockInTypes.has(movement.type) &&
+    !lastStockInByProduct.has(movement.productId)
+  ) {
+    lastStockInByProduct.set(
+      movement.productId,
+      new Date(movement.createdAt)
+    );
+  }
+}
+
+/*
+ * Acrescentar informações de inatividade ao stock.
+ */
+const cantinaStocksWithInactivity =
+  cantina.cantinaStocks.map((stock) => {
+    const quantity = Number(stock.quantity || 0);
+
+    const lastSaleAt =
+      lastSaleByProduct.get(stock.productId) || null;
+
+    const lastStockInAt =
+      lastStockInByProduct.get(stock.productId) || null;
+
+    /*
+     * Para stock parado, interessa-nos a atividade
+     * mais recente relacionada com o stock atual.
+     *
+     * Exemplo:
+     * - última venda: há 100 dias
+     * - nova entrada: há 5 dias
+     *
+     * Não seria correto dizer que o stock atual
+     * está parado há 100 dias.
+     */
+    let inactivitySince: Date | null = null;
+
+    if (lastSaleAt && lastStockInAt) {
+      inactivitySince =
+        lastSaleAt > lastStockInAt
+          ? lastSaleAt
+          : lastStockInAt;
+    } else {
+      inactivitySince =
+        lastSaleAt || lastStockInAt;
+    }
+
+    let daysWithoutSale = 0;
+
+    if (quantity > 0 && inactivitySince) {
+      const differenceMs =
+        now.getTime() - inactivitySince.getTime();
+
+      daysWithoutSale = Math.max(
+        0,
+        Math.floor(
+          differenceMs /
+            (1000 * 60 * 60 * 24)
+        )
+      );
+    }
+
+    /*
+     * REGRA DEFINIDA:
+     *
+     * 0 stock      → nunca é stock parado
+     * 0–29 dias    → normal
+     * 30–39 dias   → atenção
+     * >= 40 dias   → stock parado
+     */
+    const isDeadStock =
+      quantity > 0 &&
+      inactivitySince !== null &&
+      daysWithoutSale >= 40;
+
+    return {
+      ...stock,
+
+      lastSaleAt:
+        lastSaleAt?.toISOString() || null,
+
+      lastStockInAt:
+        lastStockInAt?.toISOString() || null,
+
+      inactivitySince:
+        inactivitySince?.toISOString() || null,
+
+      daysWithoutSale,
+
+      isDeadStock,
+    };
+  });
+
     return NextResponse.json({
       cantina: {
-        ...cantina,
-        stockMovements,
-      },
+    ...cantina,
+
+    cantinaStocks:
+      cantinaStocksWithInactivity,
+
+    stockMovements,
+  },
     });
   } catch (error) {
     console.error(error);

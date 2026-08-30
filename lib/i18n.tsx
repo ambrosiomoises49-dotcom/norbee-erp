@@ -35,6 +35,7 @@ type Dictionary = Record<
 
 
 const dictionary: Dictionary = {
+  
 
   aiLoadError: {
   pt: "Erro ao carregar a IA.",
@@ -3421,7 +3422,59 @@ noSales: {
     en: "Potential profit",
 
   },
+ticket: {
+  pt: "Ticket",
+  fr: "Ticket",
+  en: "Ticket",
+},
+deadStock: {
+  pt: "Stock parado",
+  fr: "Stock dormant",
+  en: "Dead stock",
+},
 
+noDeadStock: {
+  pt: "Nenhum produto em stock parado.",
+  fr: "Aucun produit en stock dormant.",
+  en: "No dead stock products.",
+},
+
+daysWithoutSale: {
+  pt: "Dias sem venda",
+  fr: "Jours sans vente",
+  en: "Days without sales",
+},
+
+lastSale: {
+  pt: "Última venda",
+  fr: "Dernière vente",
+  en: "Last sale",
+},
+
+neverSold: {
+  pt: "Nunca vendido",
+  fr: "Jamais vendu",
+  en: "Never sold",
+},
+
+
+tickets: {
+  pt: "Tickets",
+  fr: "Tickets",
+  en: "Tickets",
+},
+
+ticketDistribution: {
+  pt: "Distribuição dos tickets",
+  fr: "Répartition des tickets",
+  en: "Ticket distribution",
+},
+
+viewTicketDistribution: {
+  pt: "Ver distribuição dos tickets",
+  fr: "Voir la répartition des tickets",
+  en: "View ticket distribution",
+},
   todaySales: {
 
     pt: "Vendas de hoje",

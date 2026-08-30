@@ -22,6 +22,13 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 
 type SaleItem = {
   id: string;
@@ -57,6 +64,14 @@ type Employee = {
 type StockLine = {
   id: string;
   quantity: number;
+
+  lastSaleAt?: string | null;
+  lastStockInAt?: string | null;
+  inactivitySince?: string | null;
+
+  daysWithoutSale?: number;
+  isDeadStock?: boolean;
+
   product?: {
     name: string;
     internalCode: string;
@@ -125,6 +140,8 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const router = useRouter();
   const { t, lang } = useI18n();
 
+  
+
   const [cantina, setCantina] = useState<CantinaDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [currency, setCurrency] = useState("EUR");
@@ -132,6 +149,7 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const [stockTransactionsOpen, setStockTransactionsOpen] = useState(false);
   const [stockProductsOpen, setStockProductsOpen] = useState(false);
   const [stockProductsPage, setStockProductsPage] = useState(1);
+  const [deadStockOpen, setDeadStockOpen] = useState(false);
 
   const [dailyPage, setDailyPage] = useState<1 | 2>(1);
   const [reportStart, setReportStart] = useState("");
@@ -140,6 +158,14 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [stockTxPage, setStockTxPage] = useState(1);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [selectedYear, setSelectedYear] = useState(
+  new Date().getFullYear()
+);
+
+const [selectedTicketMonth, setSelectedTicketMonth] = useState<{
+  monthIndex: number;
+  monthName: string;
+} | null>(null);
 
   async function loadCompanyCurrency() {
   try {
@@ -212,6 +238,19 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const costs = cantina?.costs || [];
   const employees = cantina?.employees || [];
   const stocks = cantina?.cantinaStocks || [];
+  const deadStock = useMemo(() => {
+  return stocks
+    .filter(
+      (stock) =>
+        Number(stock.quantity || 0) > 0 &&
+        stock.isDeadStock === true
+    )
+    .sort(
+      (a, b) =>
+        Number(b.daysWithoutSale || 0) -
+        Number(a.daysWithoutSale || 0)
+    );
+}, [stocks]);
   const stockWithTransfers = useMemo(() => {
   return stocks.map((line) => {
     const totalTransferred = (cantina?.stockMovements || [])
@@ -304,29 +343,49 @@ const paginatedStockProducts = stockWithTransfers.slice(
 
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
+  const availableYears = useMemo(() => {
+  const years = Array.from(
+    new Set(
+      sales.map((sale) =>
+        new Date(sale.createdAt).getFullYear()
+      )
+    )
+  );
+
+  if (!years.includes(currentYear)) {
+    years.push(currentYear);
+  }
+
+  return years.sort((a, b) => b - a);
+}, [sales, currentYear]);
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const visibleDays = dailyPage === 1 ? days.slice(0, 16) : days.slice(16);
 
 const monthlyRows = Array.from({ length: 12 }, (_, index) => {
-  // Vendas exclusivamente deste mês E deste ano
+  // Vendas exclusivamente do mês e ANO selecionado
   const monthSales = sales.filter((sale) => {
     const saleDate = new Date(sale.createdAt);
 
     return (
-      saleDate.getFullYear() === currentYear &&
+      saleDate.getFullYear() === selectedYear &&
       saleDate.getMonth() === index
     );
   });
 
-  // Total vendido no mês
+  /*
+   * TOTAL VENDIDO NO MÊS
+   */
   const total = monthSales.reduce(
-    (sum, sale) => sum + Number(sale.totalAmount || 0),
+    (sum, sale) =>
+      sum + Number(sale.totalAmount || 0),
     0
   );
 
-  // Agrupar as vendas por dia
+  /*
+   * AGRUPAMENTO DIÁRIO
+   */
   const dailyTotals = new Map<number, number>();
 
   monthSales.forEach((sale) => {
@@ -340,50 +399,81 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
     );
   });
 
-  // Totais de cada dia que teve vendas
-  const dailyValues = Array.from(dailyTotals.values());
+  const dailyValues = Array.from(
+    dailyTotals.values()
+  );
 
-  // Melhor dia do mês
+  /*
+   * MELHOR DIA
+   */
   const max =
     dailyValues.length > 0
       ? Math.max(...dailyValues)
       : 0;
 
-  // Pior dia do mês ENTRE OS DIAS QUE TIVERAM VENDAS
+  /*
+   * PIOR DIA COM VENDAS
+   */
   const min =
     dailyValues.length > 0
       ? Math.min(...dailyValues)
       : 0;
 
-  // Média de vendas por dia ativo
+  /*
+   * MÉDIA DIÁRIA
+   */
   const average =
     dailyValues.length > 0
       ? total / dailyValues.length
       : 0;
 
-  // Mês anterior, também isolado por ano
-  let previousYear = currentYear;
+  /*
+   * TICKET MÉDIO
+   *
+   * Total faturado / número de vendas
+   */
+  const ticket =
+    monthSales.length > 0
+      ? total / monthSales.length
+      : 0;
+
+  /*
+   * MÊS ANTERIOR
+   */
+  let previousYear = selectedYear;
   let previousMonth = index - 1;
 
   if (previousMonth < 0) {
     previousMonth = 11;
-    previousYear = currentYear - 1;
+    previousYear = selectedYear - 1;
   }
 
-  const previousMonthSales = sales.filter((sale) => {
-    const saleDate = new Date(sale.createdAt);
+  const previousMonthSales = sales.filter(
+    (sale) => {
+      const saleDate = new Date(
+        sale.createdAt
+      );
 
-    return (
-      saleDate.getFullYear() === previousYear &&
-      saleDate.getMonth() === previousMonth
-    );
-  });
-
-  const previousMonthTotal = previousMonthSales.reduce(
-    (sum, sale) => sum + Number(sale.totalAmount || 0),
-    0
+      return (
+        saleDate.getFullYear() ===
+          previousYear &&
+        saleDate.getMonth() ===
+          previousMonth
+      );
+    }
   );
 
+  const previousMonthTotal =
+    previousMonthSales.reduce(
+      (sum, sale) =>
+        sum +
+        Number(sale.totalAmount || 0),
+      0
+    );
+
+  /*
+   * CRESCIMENTO
+   */
   let growth = 0;
 
   if (previousMonthTotal > 0) {
@@ -394,19 +484,27 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
   }
 
   return {
-    month: new Date(currentYear, index).toLocaleString(
-      locale(),
-      {
-        month: "long",
-      }
-    ),
+    monthIndex: index,
+
+    month: new Date(
+      selectedYear,
+      index
+    ).toLocaleString(locale(), {
+      month: "long",
+    }),
 
     total,
     max,
     min,
     average,
-    salesCount: monthSales.length,
-    growth: Number(growth.toFixed(2)),
+
+    salesCount:
+      monthSales.length,
+
+    ticket,
+
+    growth:
+      Number(growth.toFixed(2)),
   };
 });
 
@@ -419,7 +517,76 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
     (monthlyPage - 1) * MONTH_ITEMS_PER_PAGE,
     monthlyPage * MONTH_ITEMS_PER_PAGE
   );
+const ticketDistribution = useMemo(() => {
+  if (!selectedTicketMonth) {
+    return [];
+  }
 
+  const monthSales = sales.filter((sale) => {
+    const saleDate = new Date(sale.createdAt);
+
+    return (
+      saleDate.getFullYear() === selectedYear &&
+      saleDate.getMonth() ===
+        selectedTicketMonth.monthIndex
+    );
+  });
+
+  const totalTickets = monthSales.length;
+
+  const ranges = [
+    {
+      name: `< 1.000 ${currency === "AOA" ? "Kz" : currency}`,
+      count: 0,
+      color: "#EF4444",
+    },
+    {
+      name: `1.000 – 2.500 ${currency === "AOA" ? "Kz" : currency}`,
+      count: 0,
+      color: "#F59E0B",
+    },
+    {
+      name: `2.500 – 5.000 ${currency === "AOA" ? "Kz" : currency}`,
+      count: 0,
+      color: "#3B82F6",
+    },
+    {
+      name: `> 5.000 ${currency === "AOA" ? "Kz" : currency}`,
+      count: 0,
+      color: "#16A34A",
+    },
+  ];
+
+  monthSales.forEach((sale) => {
+    const value = Number(
+      sale.totalAmount || 0
+    );
+
+    if (value < 1000) {
+      ranges[0].count++;
+    } else if (value < 2500) {
+      ranges[1].count++;
+    } else if (value <= 5000) {
+      ranges[2].count++;
+    } else {
+      ranges[3].count++;
+    }
+  });
+
+  return ranges.map((range) => ({
+    ...range,
+
+    percentage:
+      totalTickets > 0
+        ? (range.count / totalTickets) * 100
+        : 0,
+  }));
+}, [
+  sales,
+  selectedTicketMonth,
+  selectedYear,
+  currency,
+]);
   const stockTransactions = useMemo(() => {
     return (cantina?.stockMovements || []).map((movement) => {
       const date = new Date(movement.createdAt);
@@ -466,9 +633,14 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
 
     if (monthIndex === -1 || !cantina) return;
 
-    const selectedMonthSales = sales.filter(
-      (sale) => new Date(sale.createdAt).getMonth() === monthIndex
-    );
+    const selectedMonthSales = sales.filter((sale) => {
+  const saleDate = new Date(sale.createdAt);
+
+  return (
+    saleDate.getFullYear() === selectedYear &&
+    saleDate.getMonth() === monthIndex
+  );
+});
 
     const total = selectedMonthSales.reduce(
       (sum, sale) => sum + Number(sale.totalAmount || 0),
@@ -483,7 +655,7 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
     doc.setFontSize(10);
     doc.text(`${t("cantina")}: ${cantina.name} (${cantina.code})`, 14, 24);
     doc.text(`${t("location")}: ${cantina.location || "-"}`, 14, 30);
-    doc.text(`${t("month")}: ${month} ${currentYear}`, 14, 36);
+    doc.text(`${t("month")}: ${month} ${selectedYear}`, 14, 36);
     doc.text(`${t("totalSold")}: ${formatMoney(total)}`, 14, 42);
     doc.text(`${t("numberOfSales")}: ${selectedMonthSales.length}`, 14, 48);
 
@@ -521,7 +693,7 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
     });
 
     doc.save(
-      `relatorio-${cantina.code}-${month}-${currentYear}.pdf`
+      `relatorio-${cantina.code}-${month}-${selectedYear}.pdf`
         .toLowerCase()
         .replaceAll(" ", "-")
     );
@@ -692,30 +864,77 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
               )}
             </CompactPanel>
 
-            <CompactPanel title={t("currentStock")} icon={<Boxes size={16} />}>
-              {stocks.length === 0 ? (
-                <Empty icon={<Boxes size={34} />} text={t("noStockProduct")} />
-              ) : (
-                <table className="w-full text-left text-xs">
-                  <thead className="text-slate-500">
-                    <tr>
-                      <th className="py-2">{t("product")}</th>
-                      <th>{t("code")}</th>
-                      <th>{t("qty")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {stocks.slice(0, 5).map((line) => (
-                      <tr key={line.id}>
-                        <td className="py-2 font-medium">{line.product?.name}</td>
-                        <td>{line.product?.internalCode}</td>
-                        <td>{line.quantity}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </CompactPanel>
+            <div className="bg-white rounded-[18px] p-4 shadow-sm min-h-[165px]">
+  <div className="flex items-center justify-between gap-3 mb-3">
+    <button
+      type="button"
+      onClick={() => setDeadStockOpen(true)}
+      className="flex items-center gap-2 group"
+    >
+      <div className="text-red-600">
+        <Boxes size={16} />
+      </div>
+
+      <h2 className="text-sm font-bold text-red-600 group-hover:underline">
+        {t("deadStock")}
+      </h2>
+    </button>
+
+    {deadStock.length > 0 && (
+      <span className="inline-flex min-w-[28px] h-7 items-center justify-center rounded-full bg-red-50 px-2 text-xs font-black text-red-600">
+        {deadStock.length}
+      </span>
+    )}
+  </div>
+
+  {deadStock.length === 0 ? (
+    <div className="rounded-[16px] bg-green-50 p-5 text-center text-green-700 flex flex-col items-center gap-2 text-sm">
+      <PackageCheck size={30} />
+
+      <p>
+        {t("noDeadStock")}
+      </p>
+    </div>
+  ) : (
+    <table className="w-full text-left text-xs">
+      <thead className="text-slate-500">
+        <tr>
+          <th className="py-2">
+            {t("product")}
+          </th>
+
+          <th>
+            {t("qty")}
+          </th>
+
+          <th className="text-right">
+            {t("daysWithoutSale")}
+          </th>
+        </tr>
+      </thead>
+
+      <tbody className="divide-y">
+        {deadStock.slice(0, 5).map((line) => (
+          <tr key={line.id}>
+            <td className="py-2 font-medium">
+              {line.product?.name ||
+                t("unknownProduct")}
+            </td>
+
+            <td>
+              {line.quantity}
+            </td>
+
+            <td className="text-right font-bold text-red-600">
+              {line.daysWithoutSale || 0}{" "}
+              {t("days")}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+</div>
 
             <CompactPanel title={t("costs")} icon={<Wallet size={16} />}>
               {costs.length === 0 ? (
@@ -921,9 +1140,28 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
 
       {viewMode === "monthly" && (
         <FullPanel
-          title={`${t("monthlyTracking")} — ${currentYear}`}
+          title={`${t("monthlyTracking")} — ${selectedYear}`}
           icon={<FileText size={18} />}
         >
+        <div className="flex justify-end mb-4">
+  <select
+    value={selectedYear}
+    onChange={(e) => {
+      setSelectedYear(Number(e.target.value));
+      setMonthlyPage(1);
+    }}
+    className="rounded-[12px] border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#123A5C] outline-none focus:border-[#123A5C]"
+  >
+    {availableYears.map((year) => (
+      <option
+        key={year}
+        value={year}
+      >
+        {year}
+      </option>
+    ))}
+  </select>
+</div>
           <div className="overflow-x-auto rounded-[18px] border">
             <table className="w-full min-w-[900px] text-left text-xs">
               <thead className="bg-slate-50 text-slate-500">
@@ -934,6 +1172,7 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
                   <th className="px-4 py-3">{t("min")}</th>
                   <th className="px-4 py-3">{t("average")}</th>
                   <th className="px-4 py-3">{t("numberOfSales")}</th>
+                  <th className="px-4 py-3">{t("ticket")}</th>
                   <th className="px-4 py-3">{t("growth")}</th>
                   <th className="px-4 py-3">PDF</th>
                 </tr>
@@ -949,6 +1188,26 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
                     <td className="px-4 py-2">{formatMoney(row.min)}</td>
                     <td className="px-4 py-2">{formatMoney(row.average)}</td>
                     <td className="px-4 py-2">{row.salesCount}</td>
+                    <td className="px-4 py-2">
+                      {row.salesCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedTicketMonth({
+                              monthIndex: row.monthIndex,
+                              monthName: row.month,
+                            })
+                          }
+                          className="font-bold text-[#123A5C] hover:underline"
+                          title={t("viewTicketDistribution")}
+                        >
+                          {formatMoney(row.ticket)}
+                        </button>
+                      ) : (
+                        formatMoney(0)
+                      )}
+                    </td>
+
                     <td
                         className={`px-4 py-2 font-semibold ${
                         row.growth > 0
@@ -987,6 +1246,149 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
           />
         </FullPanel>
       )}
+          {deadStockOpen && (
+  <div className="fixed left-[200px] top-[110px] right-0 bottom-0 z-40 bg-[#F4F7FA] p-5 overflow-hidden">
+    <div className="h-full bg-white rounded-[24px] shadow-xl flex flex-col overflow-hidden">
+
+      {/* CABEÇALHO */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <div className="flex items-center gap-2">
+            <Boxes
+              size={22}
+              className="text-red-600"
+            />
+
+            <h2 className="text-2xl font-bold text-red-600">
+              {t("deadStock")}
+            </h2>
+          </div>
+
+          <p className="text-sm text-slate-500 mt-1">
+            {cantina.name} — {cantina.code}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setDeadStockOpen(false)
+          }
+          className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800"
+        >
+          <X size={24} />
+        </button>
+      </div>
+
+      {/* CONTEÚDO */}
+      <div className="flex-1 p-6 overflow-auto">
+        {deadStock.length === 0 ? (
+          <Empty
+            icon={<PackageCheck size={46} />}
+            text={t("noDeadStock")}
+          />
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-slate-500">
+                {deadStock.length}{" "}
+                {deadStock.length === 1
+                  ? t("product")
+                  : t("products")}
+              </p>
+
+              <span className="rounded-full bg-red-50 px-4 py-2 text-xs font-bold text-red-600">
+                ≥ 40 {t("days")}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-[18px] border">
+              <table className="w-full min-w-[850px] text-left text-sm">
+                <thead className="bg-slate-50 text-slate-500 sticky top-0">
+                  <tr>
+                    <th className="px-5 py-4">
+                      {t("product")}
+                    </th>
+
+                    <th className="px-5 py-4">
+                      {t("code")}
+                    </th>
+
+                    <th className="px-5 py-4 text-right">
+                      {t("qty")}
+                    </th>
+
+                    <th className="px-5 py-4 text-right">
+                      {t("daysWithoutSale")}
+                    </th>
+
+                    <th className="px-5 py-4 text-right">
+                      {t("lastSale")}
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {deadStock.map((line) => (
+                    <tr
+                      key={line.id}
+                      className="hover:bg-red-50/30"
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-[12px] bg-red-50 flex items-center justify-center">
+                            <Boxes
+                              size={17}
+                              className="text-red-600"
+                            />
+                          </div>
+
+                          <span className="font-semibold text-slate-800">
+                            {line.product?.name ||
+                              t("unknownProduct")}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4 text-slate-500">
+                        {line.product?.internalCode ||
+                          "-"}
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <span className="inline-flex min-w-[65px] justify-center rounded-full bg-slate-100 px-3 py-1.5 font-bold text-slate-700">
+                          {line.quantity}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <span className="inline-flex min-w-[90px] justify-center rounded-full bg-red-50 px-3 py-1.5 font-bold text-red-600">
+                          {line.daysWithoutSale || 0}{" "}
+                          {t("days")}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-right text-slate-500">
+                        {line.lastSaleAt
+                          ? new Date(
+                              line.lastSaleAt
+                            ).toLocaleDateString(
+                              locale()
+                            )
+                          : t("neverSold")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
       {stockProductsOpen && (
   <div className="fixed left-[200px] top-[110px] right-0 bottom-0 z-40 bg-[#F4F7FA] p-5 overflow-hidden">
     <div className="h-full bg-white rounded-[24px] shadow-xl flex flex-col overflow-hidden">
@@ -1039,6 +1441,9 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
                     <th className="px-5 py-4 text-right">
                       {t("remainingQuantity")}
                     </th>
+                    <th className="px-5 py-4 text-right">
+                      {t("daysWithoutSale")}
+                    </th>
                   </tr>
                 </thead>
 
@@ -1086,6 +1491,26 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
                           {line.remainingQuantity}
                         </span>
                       </td>
+                      <td className="px-5 py-4 text-right">
+                            {line.remainingQuantity <= 0 ? (
+                              <span className="text-slate-400">
+                                -
+                              </span>
+                            ) : (
+                              <span
+                                className={`inline-flex min-w-[85px] justify-center rounded-full px-3 py-1.5 text-sm font-bold ${
+                                  Number(line.daysWithoutSale || 0) >= 40
+                                    ? "bg-red-50 text-red-700"
+                                    : Number(line.daysWithoutSale || 0) >= 30
+                                    ? "bg-amber-50 text-amber-700"
+                                    : "bg-slate-50 text-slate-600"
+                                }`}
+                              >
+                                {Number(line.daysWithoutSale || 0)}{" "}
+                                {t("days")}
+                              </span>
+                            )}
+                          </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1114,6 +1539,132 @@ const monthlyRows = Array.from({ length: 12 }, (_, index) => {
           </>
         )}
       </div>
+    </div>
+  </div>
+)}
+{selectedTicketMonth && (
+  <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6">
+    <div className="bg-white rounded-[24px] shadow-xl w-full max-w-2xl p-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">
+            {t("ticketDistribution")}
+          </h2>
+
+          <p className="text-sm text-slate-500 mt-1 capitalize">
+            {selectedTicketMonth.monthName} — {selectedYear}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setSelectedTicketMonth(null)
+          }
+          className="p-2 rounded-xl hover:bg-slate-100"
+        >
+          <X size={22} />
+        </button>
+      </div>
+
+      {ticketDistribution.reduce(
+        (sum, range) => sum + range.count,
+        0
+      ) === 0 ? (
+        <div className="py-16 text-center text-slate-500">
+          {t("noSales")}
+        </div>
+      ) : (
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-[1fr_260px] gap-6 items-center">
+          {/* GRÁFICO CIRCULAR */}
+          <div className="h-[300px]">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+            >
+              <PieChart>
+                <Pie
+                  data={ticketDistribution}
+                  dataKey="count"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={70}
+                  outerRadius={110}
+                  paddingAngle={3}
+                >
+                  {ticketDistribution.map(
+                    (entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={entry.color}
+                      />
+                    )
+                  )}
+                </Pie>
+
+                <Tooltip
+                  formatter={(
+                    value,
+                    _name,
+                    props
+                  ) => {
+                    const payload =
+                      props.payload as {
+                        percentage: number;
+                      };
+
+                    return [
+                      `${Number(value)} ${t("sales")} (${payload.percentage.toFixed(1)}%)`,
+                      t("tickets"),
+                    ];
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* LEGENDA */}
+          <div className="space-y-3">
+            {ticketDistribution.map(
+              (range) => (
+                <div
+                  key={range.name}
+                  className="flex items-center justify-between gap-4 rounded-[14px] border p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor:
+                          range.color,
+                      }}
+                    />
+
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">
+                        {range.name}
+                      </p>
+
+                      <p className="text-[11px] text-slate-500">
+                        {range.count}{" "}
+                        {t("sales")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="font-black text-slate-800">
+                    {range.percentage.toFixed(
+                      1
+                    )}
+                    %
+                  </span>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
     </div>
   </div>
 )}
