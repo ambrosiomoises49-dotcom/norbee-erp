@@ -1804,14 +1804,15 @@ function downloadStockMonthlyClose() {
                           </span>
                         </div>
                       </td>
-
-                      <td className="px-5 py-4 text-slate-500">
-                        {line.product?.internalCode || "-"}
-                      </td>
-
                       <td className="px-5 py-4 text-right">
                         <span className="font-bold text-[#123A5C]">
                           {line.totalTransferred}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <span className="inline-flex min-w-[70px] justify-center rounded-full bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700">
+                          {line.transferredThisMonth}
                         </span>
                       </td>
 
@@ -1826,26 +1827,27 @@ function downloadStockMonthlyClose() {
                           {line.remainingQuantity}
                         </span>
                       </td>
+
                       <td className="px-5 py-4 text-right">
-                            {line.remainingQuantity <= 0 ? (
-                              <span className="text-slate-400">
-                                -
-                              </span>
-                            ) : (
-                              <span
-                                className={`inline-flex min-w-[85px] justify-center rounded-full px-3 py-1.5 text-sm font-bold ${
-                                  Number(line.daysWithoutSale || 0) >= 40
-                                    ? "bg-red-50 text-red-700"
-                                    : Number(line.daysWithoutSale || 0) >= 30
-                                    ? "bg-amber-50 text-amber-700"
-                                    : "bg-slate-50 text-slate-600"
-                                }`}
-                              >
-                                {Number(line.daysWithoutSale || 0)}{" "}
-                                {t("days")}
-                              </span>
-                            )}
-                          </td>
+                        {line.remainingQuantity <= 0 ? (
+                          <span className="text-slate-400">
+                            -
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-flex min-w-[85px] justify-center rounded-full px-3 py-1.5 text-sm font-bold ${
+                              Number(line.daysWithoutSale || 0) >= 40
+                                ? "bg-red-50 text-red-700"
+                                : Number(line.daysWithoutSale || 0) >= 30
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-slate-50 text-slate-600"
+                            }`}
+                          >
+                            {Number(line.daysWithoutSale || 0)}{" "}
+                            {t("days")}
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

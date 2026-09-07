@@ -3456,7 +3456,11 @@ neverSold: {
   fr: "Jamais vendu",
   en: "Never sold",
 },
-
+transferredThisMonth: {
+  pt: "Transferido no mês",
+  fr: "Transféré ce mois",
+  en: "Transferred this month",
+},
 
 tickets: {
   pt: "Tickets",
