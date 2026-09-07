@@ -64,7 +64,7 @@ type Employee = {
 type StockLine = {
   id: string;
   quantity: number;
-
+  productId: string;
   lastSaleAt?: string | null;
   lastStockInAt?: string | null;
   inactivitySince?: string | null;
@@ -101,6 +101,7 @@ type StockMovement = {
     name: string;
     identifier: string;
   } | null;
+  productId: string;
 };
 
 type CantinaDetails = {
@@ -161,7 +162,13 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const [selectedYear, setSelectedYear] = useState(
   new Date().getFullYear()
 );
+const [stockCloseMonth, setStockCloseMonth] = useState(
+  new Date().getMonth()
+);
 
+const [stockCloseYear, setStockCloseYear] = useState(
+  new Date().getFullYear()
+);
 const [selectedTicketMonth, setSelectedTicketMonth] = useState<{
   monthIndex: number;
   monthName: string;
@@ -252,23 +259,40 @@ const [selectedTicketMonth, setSelectedTicketMonth] = useState<{
     );
 }, [stocks]);
   const stockWithTransfers = useMemo(() => {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
   return stocks.map((line) => {
-    const totalTransferred = (cantina?.stockMovements || [])
-      .filter(
-        (movement) =>
-          movement.type === "TRANSFER_IN" &&
-          movement.product?.internalCode ===
-            line.product?.internalCode
-      )
+    const productTransfers = (cantina?.stockMovements || []).filter(
+      (movement) =>
+        movement.type === "TRANSFER_IN" &&
+        movement.productId === line.productId
+    );
+
+    const totalTransferred = productTransfers.reduce(
+      (sum, movement) => sum + Number(movement.quantity || 0),
+      0
+    );
+
+    const transferredThisMonth = productTransfers
+      .filter((movement) => {
+        const movementDate = new Date(movement.createdAt);
+
+        return (
+          movementDate.getFullYear() === currentYear &&
+          movementDate.getMonth() === currentMonth
+        );
+      })
       .reduce(
-        (sum, movement) =>
-          sum + Number(movement.quantity || 0),
+        (sum, movement) => sum + Number(movement.quantity || 0),
         0
       );
 
     return {
       ...line,
       totalTransferred,
+      transferredThisMonth,
       remainingQuantity: Number(line.quantity || 0),
     };
   });
@@ -627,7 +651,246 @@ const ticketDistribution = useMemo(() => {
   function getMovementLabel(type: string) {
     return isStockIn(type) ? t("stockIn") : t("stockOut");
   }
+  function getStockMonthlyCloseRows(
+  year: number,
+  month: number
+) {
+  if (!cantina) return [];
 
+  const movements = cantina.stockMovements || [];
+
+  return stocks
+    .map((stock) => {
+      const productId = stock.productId;
+
+      // ======================================================
+      // TOTAL TRANSFERIDO NO MÊS ESCOLHIDO
+      // ======================================================
+
+      const transferredInMonth = movements
+        .filter((movement) => {
+          if (
+            movement.type !== "TRANSFER_IN" ||
+            movement.productId !== productId
+          ) {
+            return false;
+          }
+
+          const movementDate = new Date(
+            movement.createdAt
+          );
+
+          return (
+            movementDate.getFullYear() === year &&
+            movementDate.getMonth() === month
+          );
+        })
+        .reduce(
+          (sum, movement) =>
+            sum + Number(movement.quantity || 0),
+          0
+        );
+
+      // ======================================================
+      // STOCK QUE EXISTIA NO FINAL DO MÊS
+      // ======================================================
+      //
+      // Começamos pelo stock atual.
+      // Depois desfazemos todos os movimentos feitos
+      // depois do mês escolhido.
+      // ======================================================
+
+      let remainingAtMonthEnd = Number(
+        stock.quantity || 0
+      );
+
+      movements
+        .filter(
+          (movement) =>
+            movement.productId === productId
+        )
+        .forEach((movement) => {
+          const movementDate = new Date(
+            movement.createdAt
+          );
+
+          const isAfterSelectedMonth =
+            movementDate.getFullYear() > year ||
+            (
+              movementDate.getFullYear() === year &&
+              movementDate.getMonth() > month
+            );
+
+          if (!isAfterSelectedMonth) {
+            return;
+          }
+
+          const quantity = Number(
+            movement.quantity || 0
+          );
+
+          // Se depois daquele mês entrou stock,
+          // retiramos essa entrada para voltar no tempo.
+          if (
+            [
+              "PURCHASE_IN",
+              "TRANSFER_IN",
+              "ADJUSTMENT_IN",
+              "RETURN",
+            ].includes(movement.type)
+          ) {
+            remainingAtMonthEnd -= quantity;
+          }
+
+          // Se depois daquele mês saiu stock,
+          // devolvemos essa saída para voltar no tempo.
+          if (
+            [
+              "TRANSFER_OUT",
+              "SALE_OUT",
+              "ADJUSTMENT_OUT",
+              "LOSS",
+            ].includes(movement.type)
+          ) {
+            remainingAtMonthEnd += quantity;
+          }
+        });
+
+      return {
+        productId,
+        productName:
+          stock.product?.name ||
+          t("unknownProduct"),
+        transferredInMonth,
+        remainingAtMonthEnd,
+      };
+    })
+    .filter(
+      (row) =>
+        row.transferredInMonth > 0 ||
+        row.remainingAtMonthEnd > 0
+    )
+    .sort((a, b) =>
+      a.productName.localeCompare(
+        b.productName
+      )
+    );
+}
+
+
+function downloadStockMonthlyClose() {
+  if (!cantina) return;
+
+  const rows = getStockMonthlyCloseRows(
+    stockCloseYear,
+    stockCloseMonth
+  );
+
+  const monthName = new Date(
+    stockCloseYear,
+    stockCloseMonth,
+    1
+  ).toLocaleString(locale(), {
+    month: "long",
+  });
+
+  const now = new Date();
+
+  const isCurrentMonth =
+    now.getFullYear() === stockCloseYear &&
+    now.getMonth() === stockCloseMonth;
+
+  const doc = new jsPDF(
+    "landscape",
+    "mm",
+    "a4"
+  );
+
+  doc.setFontSize(18);
+
+  doc.text(
+    `${
+      isCurrentMonth
+        ? "Fecho provisório de stock"
+        : "Fecho mensal de stock"
+    } - ${cantina.name}`,
+    14,
+    16
+  );
+
+  doc.setFontSize(10);
+
+  doc.text(
+    `${t("cantina")}: ${cantina.name} (${cantina.code})`,
+    14,
+    25
+  );
+
+  doc.text(
+    `${t("location")}: ${
+      cantina.location || "-"
+    }`,
+    14,
+    31
+  );
+
+  doc.text(
+    `${t("month")}: ${monthName} ${stockCloseYear}`,
+    14,
+    37
+  );
+
+  if (isCurrentMonth) {
+    doc.text(
+      "Documento provisório: o mês ainda está em curso.",
+      14,
+      43
+    );
+  }
+
+  autoTable(doc, {
+    startY: isCurrentMonth ? 50 : 46,
+
+    head: [
+      [
+        t("product"),
+        `Transferido em ${monthName}`,
+        `Restante no fim de ${monthName}`,
+      ],
+    ],
+
+    body: rows.map((row) => [
+      row.productName,
+      String(row.transferredInMonth),
+      String(row.remainingAtMonthEnd),
+    ]),
+
+    styles: {
+      fontSize: 9,
+      cellPadding: 3,
+    },
+
+    headStyles: {
+      fillColor: [18, 58, 92],
+      textColor: 255,
+    },
+
+    columnStyles: {
+      1: {
+        halign: "right",
+      },
+      2: {
+        halign: "right",
+      },
+    },
+  });
+
+  doc.save(
+    `fecho-stock-${cantina.code}-${monthName}-${stockCloseYear}.pdf`
+      .toLowerCase()
+      .replaceAll(" ", "-")
+  );
+}
   function downloadMonthlyReport(month: string) {
     const monthIndex = monthlyRows.findIndex((row) => row.month === month);
 
@@ -1393,25 +1656,96 @@ const ticketDistribution = useMemo(() => {
   <div className="fixed left-[200px] top-[110px] right-0 bottom-0 z-40 bg-[#F4F7FA] p-5 overflow-hidden">
     <div className="h-full bg-white rounded-[24px] shadow-xl flex flex-col overflow-hidden">
 
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">
-            {t("cantinaStock")}
-          </h2>
+      <div className="flex flex-col gap-4 px-6 py-4 border-b border-slate-100 xl:flex-row xl:items-center xl:justify-between">
 
-          <p className="text-sm text-slate-500 mt-1">
-            {cantina.name} — {cantina.code}
-          </p>
-        </div>
+  <div>
+    <h2 className="text-2xl font-bold text-slate-800">
+      {t("cantinaStock")}
+    </h2>
 
-        <button
-          type="button"
-          onClick={() => setStockProductsOpen(false)}
-          className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800"
+    <p className="text-sm text-slate-500 mt-1">
+      {cantina.name} — {cantina.code}
+    </p>
+  </div>
+
+  <div className="flex flex-wrap items-center gap-2">
+
+    <select
+      value={stockCloseMonth}
+      onChange={(e) =>
+        setStockCloseMonth(
+          Number(e.target.value)
+        )
+      }
+      className="rounded-[12px] border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-[#123A5C]"
+    >
+      {Array.from(
+        { length: 12 },
+        (_, index) => (
+          <option
+            key={index}
+            value={index}
+          >
+            {new Date(
+              stockCloseYear,
+              index,
+              1
+            ).toLocaleString(
+              locale(),
+              {
+                month: "long",
+              }
+            )}
+          </option>
+        )
+      )}
+    </select>
+
+    <select
+      value={stockCloseYear}
+      onChange={(e) =>
+        setStockCloseYear(
+          Number(e.target.value)
+        )
+      }
+      className="rounded-[12px] border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-[#123A5C]"
+    >
+      {Array.from(
+        { length: 6 },
+        (_, index) =>
+          new Date().getFullYear() -
+          index
+      ).map((year) => (
+        <option
+          key={year}
+          value={year}
         >
-          <X size={24} />
-        </button>
-      </div>
+          {year}
+        </option>
+      ))}
+    </select>
+
+    <button
+      type="button"
+      onClick={downloadStockMonthlyClose}
+      className="inline-flex items-center gap-2 rounded-[12px] bg-[#123A5C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B2540]"
+    >
+      <Download size={16} />
+      Baixar fecho
+    </button>
+
+    <button
+      type="button"
+      onClick={() =>
+        setStockProductsOpen(false)
+      }
+      className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800"
+    >
+      <X size={24} />
+    </button>
+
+  </div>
+</div>
 
       <div className="flex-1 p-6 overflow-auto">
         {stockWithTransfers.length === 0 ? (
@@ -1425,27 +1759,28 @@ const ticketDistribution = useMemo(() => {
               <table className="w-full min-w-[850px] text-left text-sm">
 
                 <thead className="bg-slate-50 text-slate-500">
-                  <tr>
-                    <th className="px-5 py-4">
-                      {t("product")}
-                    </th>
+                    <tr>
+                      <th className="px-5 py-4">
+                        {t("product")}
+                      </th>
 
-                    <th className="px-5 py-4">
-                      {t("code")}
-                    </th>
+                      <th className="px-5 py-4 text-right">
+                        {t("totalTransferred")}
+                      </th>
 
-                    <th className="px-5 py-4 text-right">
-                      {t("totalTransferred")}
-                    </th>
+                      <th className="px-5 py-4 text-right">
+                        {t("transferredThisMonth")}
+                      </th>
 
-                    <th className="px-5 py-4 text-right">
-                      {t("remainingQuantity")}
-                    </th>
-                    <th className="px-5 py-4 text-right">
-                      {t("daysWithoutSale")}
-                    </th>
-                  </tr>
-                </thead>
+                      <th className="px-5 py-4 text-right">
+                        {t("remainingQuantity")}
+                      </th>
+
+                      <th className="px-5 py-4 text-right">
+                        {t("daysWithoutSale")}
+                      </th>
+                    </tr>
+                  </thead>
 
                 <tbody className="divide-y divide-slate-100">
                   {paginatedStockProducts.map((line) => (
