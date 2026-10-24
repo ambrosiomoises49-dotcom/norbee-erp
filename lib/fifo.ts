@@ -325,3 +325,208 @@ export async function getPotentialStockProfit({
     },
   };
 }
+
+export async function repairZeroCostTransferBatches({
+  tx,
+  companyId,
+  productId,
+  cantinaId,
+}: {
+  tx: Tx;
+  companyId: string;
+  productId: string;
+  cantinaId?: string;
+}) {
+  /*
+   * ============================================================
+   * REPARAÇÃO SEGURA DE LOTES TRANSFERIDOS COM CUSTO ZERO
+   * ============================================================
+   *
+   * Só considera lotes que:
+   *
+   * - pertencem à empresa atual
+   * - pertencem ao produto indicado
+   * - foram criados por TRANSFER_IN
+   * - ainda possuem quantidade em stock
+   * - têm unitCost = 0
+   * - possuem sourceId
+   *
+   * O custo NÃO é inventado e NÃO vem do preço atual do produto.
+   *
+   * Recuperamos o custo do StockBatch central de origem
+   * indicado pelo sourceId.
+   *
+   * Vendas e consumos FIFO já realizados NÃO são alterados.
+   * ============================================================
+   */
+
+  const zeroCostBatches =
+    await tx.stockBatch.findMany({
+      where: {
+        companyId,
+        productId,
+
+        ...(cantinaId
+          ? {
+              cantinaId,
+            }
+          : {
+              cantinaId: {
+                not: null,
+              },
+            }),
+
+        sourceType: "TRANSFER_IN",
+
+        remainingQuantity: {
+          gt: 0,
+        },
+
+        unitCost: 0,
+
+        sourceId: {
+          not: null,
+        },
+      },
+
+      select: {
+        id: true,
+        sourceId: true,
+        remainingQuantity: true,
+        cantinaId: true,
+      },
+    });
+
+  if (zeroCostBatches.length === 0) {
+    return {
+      found: 0,
+      repaired: 0,
+      skipped: 0,
+    };
+  }
+
+  /*
+   * ============================================================
+   * CARREGAR OS LOTES DE ORIGEM
+   * ============================================================
+   */
+
+  const sourceIds = Array.from(
+    new Set(
+      zeroCostBatches
+        .map((batch) => batch.sourceId)
+        .filter(
+          (sourceId): sourceId is string =>
+            Boolean(sourceId)
+        )
+    )
+  );
+
+  const sourceBatches =
+    await tx.stockBatch.findMany({
+      where: {
+        id: {
+          in: sourceIds,
+        },
+
+        companyId,
+
+        productId,
+
+        /*
+         * O lote de origem da transferência deve
+         * ser o lote do stock central.
+         */
+        cantinaId: null,
+      },
+
+      select: {
+        id: true,
+        unitCost: true,
+      },
+    });
+
+  const sourceCostMap = new Map<
+    string,
+    number
+  >();
+
+  for (const source of sourceBatches) {
+    const cost = Number(source.unitCost);
+
+    if (
+      Number.isFinite(cost) &&
+      cost > 0
+    ) {
+      sourceCostMap.set(
+        source.id,
+        cost
+      );
+    }
+  }
+
+  /*
+   * ============================================================
+   * REPARAR APENAS OS LOTES CUJA ORIGEM TEM CUSTO VÁLIDO
+   * ============================================================
+   */
+
+  let repaired = 0;
+  let skipped = 0;
+
+  for (const batch of zeroCostBatches) {
+    if (!batch.sourceId) {
+      skipped += 1;
+      continue;
+    }
+
+    const sourceCost =
+      sourceCostMap.get(batch.sourceId);
+
+    /*
+     * Se não encontramos um custo válido na origem,
+     * NÃO inventamos nenhum valor.
+     */
+    if (
+      sourceCost === undefined ||
+      sourceCost <= 0
+    ) {
+      skipped += 1;
+      continue;
+    }
+
+    /*
+     * Fazemos novamente as condições importantes
+     * no UPDATE para evitar alterar um lote que,
+     * eventualmente, tenha mudado entre o findMany
+     * e este momento.
+     */
+    const result =
+      await tx.stockBatch.updateMany({
+        where: {
+          id: batch.id,
+          companyId,
+          productId,
+          sourceType: "TRANSFER_IN",
+
+          remainingQuantity: {
+            gt: 0,
+          },
+
+          unitCost: 0,
+        },
+
+        data: {
+          unitCost: sourceCost,
+        },
+      });
+
+    repaired += result.count;
+  }
+
+  return {
+    found: zeroCostBatches.length,
+    repaired,
+    skipped,
+  };
+}

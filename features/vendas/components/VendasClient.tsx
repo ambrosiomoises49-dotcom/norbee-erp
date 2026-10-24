@@ -327,24 +327,31 @@ export default function VendasClient() {
     setPaymentStep("method");
   }
 
-  function buildSalePayload(method: PaymentMethod) {
-    return {
-      cantinaId: selectedCantinaId,
-      items: cart.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      })),
-      paymentMethod: method,
-      paidAmount: method === "CASH" ? Number(paidAmount || 0) : total,
-      
-      customerName,
-      customerTaxId: null,
-      notes:
-  discountValue > 0
-    ? `${t("discount")}: ${formatMoney(discountValue)}`
-    : null,
-  }
+ function buildSalePayload(method: PaymentMethod) {
+  return {
+    cantinaId: selectedCantinaId,
+
+    items: cart.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+    })),
+
+    paymentMethod: method,
+
+    paidAmount:
+      method === "CASH"
+        ? Number(paidAmount || 0)
+        : total,
+
+    discountAmount: discountValue,
+
+    customerName,
+
+    customerTaxId: null,
+
+    notes: null,
   };
+};
   async function submitSale(method: PaymentMethod) {
     setSelling(true);
     setError("");

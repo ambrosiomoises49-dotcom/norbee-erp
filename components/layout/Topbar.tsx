@@ -52,6 +52,16 @@ export default function Topbar() {
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationFilter, setNotificationFilter] =
+  useState<"all" | "unread">("all");
+
+const [notificationPage, setNotificationPage] = useState(1);
+
+const [notificationsHasMore, setNotificationsHasMore] =
+  useState(false);
+
+const [notificationsLoadingMore, setNotificationsLoadingMore] =
+  useState(false);
 
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -101,37 +111,134 @@ export default function Topbar() {
     );
   }, [search, lang]);
 
-  async function loadNotifications() {
+  async function loadNotifications(
+  options?: {
+    page?: number;
+    append?: boolean;
+    filter?: "all" | "unread";
+  }
+) {
   try {
-    const res = await fetch("/api/notifications", {
-      cache: "no-store",
-    });
+    const page = options?.page ?? 1;
+    const append = options?.append ?? false;
+    const filter =
+      options?.filter ?? notificationFilter;
+
+    const params = new URLSearchParams();
+
+    params.set("page", String(page));
+
+    if (filter === "unread") {
+      params.set("unreadOnly", "true");
+    }
+
+    const res = await fetch(
+      `/api/notifications?${params.toString()}`,
+      {
+        cache: "no-store",
+      }
+    );
 
     const data = await res.json();
 
     if (!res.ok) return;
 
-    setNotifications(data.notifications || []);
-    setUnreadCount(data.unreadCount || 0);
+    if (append) {
+      setNotifications((prev) => {
+        const map = new Map(
+          prev.map((item) => [
+            item.id,
+            item,
+          ])
+        );
+
+        for (const item of data.notifications || []) {
+          map.set(item.id, item);
+        }
+
+        return Array.from(map.values());
+      });
+    } else {
+      setNotifications(
+        data.notifications || []
+      );
+    }
+
+    setUnreadCount(
+      data.unreadCount || 0
+    );
+
+    setNotificationPage(
+      data.page || page
+    );
+
+    setNotificationsHasMore(
+      Boolean(data.hasMore)
+    );
   } catch {
     // evita crash se a API falhar
   }
 }
 
+async function changeNotificationFilter(
+  filter: "all" | "unread"
+) {
+  setNotificationFilter(filter);
+  setNotificationPage(1);
+
+  await loadNotifications({
+    page: 1,
+    append: false,
+    filter,
+  });
+}
+
+async function loadMoreNotifications() {
+  if (
+    notificationsLoadingMore ||
+    !notificationsHasMore
+  ) {
+    return;
+  }
+
+  try {
+    setNotificationsLoadingMore(true);
+
+    const nextPage =
+      notificationPage + 1;
+
+    await loadNotifications({
+      page: nextPage,
+      append: true,
+      filter: notificationFilter,
+    });
+  } finally {
+    setNotificationsLoadingMore(false);
+  }
+}
+
  useEffect(() => {
   const timeout = setTimeout(() => {
-    void loadNotifications();
+    void loadNotifications({
+      page: 1,
+      append: false,
+      filter: "all",
+    });
   }, 0);
 
   const interval = setInterval(() => {
-    void loadNotifications();
+    void loadNotifications({
+      page: 1,
+      append: false,
+      filter: notificationFilter,
+    });
   }, 30000);
 
   return () => {
     clearTimeout(timeout);
     clearInterval(interval);
   };
-}, []);
+}, [notificationFilter]);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
@@ -184,7 +291,11 @@ export default function Topbar() {
 
     setNotificationsOpen(false);
 
-    await loadNotifications();
+    await loadNotifications({
+  page: 1,
+  append: false,
+  filter: notificationFilter,
+});
 
     if (notification.link) {
       router.push(notification.link);
@@ -353,9 +464,17 @@ async function changeCurrency(currency: string) {
           <button
             type="button"
             onClick={() => {
-              setNotificationsOpen((v) => !v);
-              void loadNotifications();
-            }}
+                    setNotificationsOpen((v) => !v);
+
+                    setNotificationFilter("all");
+                    setNotificationPage(1);
+
+                    void loadNotifications({
+                      page: 1,
+                      append: false,
+                      filter: "all",
+                    });
+                  }}
             className="relative rounded-[18px] p-2 transition hover:bg-white/10"
           >
             <Bell size={32} />
@@ -370,6 +489,42 @@ async function changeCurrency(currency: string) {
           {notificationsOpen && (
             <div className="absolute right-0 mt-4 w-[390px] bg-white text-slate-800 rounded-[22px] shadow-xl z-50 overflow-hidden">
               <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                              <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void changeNotificationFilter("all")
+                  }
+                  className={`rounded-full px-4 py-2 text-xs font-bold transition ${
+                    notificationFilter === "all"
+                      ? "bg-[#123A5C] text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Todas
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    void changeNotificationFilter(
+                      "unread"
+                    )
+                  }
+                  className={`rounded-full px-4 py-2 text-xs font-bold transition ${
+                    notificationFilter === "unread"
+                      ? "bg-[#123A5C] text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Não lidas
+                  {unreadCount > 0 && (
+                    <span className="ml-2">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+              </div>
                 <div>
                   <h3 className="font-black text-slate-800">
                     {t("notifications")}
@@ -434,6 +589,25 @@ async function changeCurrency(currency: string) {
                     </button>
                   ))
                 )}
+
+                {notificationsHasMore && (
+                <div className="p-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void loadMoreNotifications()
+                    }
+                    disabled={
+                      notificationsLoadingMore
+                    }
+                    className="w-full rounded-[12px] bg-slate-100 px-4 py-3 text-xs font-bold text-[#123A5C] hover:bg-slate-200 disabled:opacity-50"
+                  >
+                    {notificationsLoadingMore
+                      ? "A carregar..."
+                      : "Carregar mais"}
+                  </button>
+                </div>
+              )}
               </div>
             </div>
           )}

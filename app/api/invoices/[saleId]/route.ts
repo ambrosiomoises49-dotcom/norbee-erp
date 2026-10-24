@@ -74,8 +74,13 @@ export async function GET(
 
     if (!invoice) {
       try {
-        const subtotal = toNumber(sale.totalAmount);
-        const totalAmount = toNumber(sale.totalAmount);
+        const subtotal = toNumber(sale.subtotal);
+const totalAmount = toNumber(sale.totalAmount);
+
+const discountAmount = Math.max(
+  0,
+  subtotal - totalAmount
+);
 
         invoice = await prisma.invoice.create({
           data: {
@@ -85,7 +90,7 @@ export async function GET(
             customerName: sale.customerName || null,
             customerTaxId: sale.customerTaxId || null,
             subtotal,
-            discountAmount: 0,
+            discountAmount,
             totalAmount,
             paymentMethod: sale.paymentMethod,
             status: "ISSUED",
