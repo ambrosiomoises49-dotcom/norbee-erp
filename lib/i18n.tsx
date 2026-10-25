@@ -35,6 +35,30 @@ type Dictionary = Record<
 
 
 const dictionary: Dictionary = {
+
+  notificationsAll: {
+  pt: "Todas",
+  fr: "Toutes",
+  en: "All",
+},
+
+notificationsUnread: {
+  pt: "Não lidas",
+  fr: "Non lues",
+  en: "Unread",
+},
+
+notificationsLoadMore: {
+  pt: "Carregar mais",
+  fr: "Charger plus",
+  en: "Load more",
+},
+
+notificationsLoading: {
+  pt: "A carregar...",
+  fr: "Chargement...",
+  en: "Loading...",
+},
   
 
   aiLoadError: {

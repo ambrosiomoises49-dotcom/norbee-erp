@@ -461,157 +461,155 @@ async function changeCurrency(currency: string) {
 
       <div className="flex items-center gap-8">
         <div className="relative" ref={notificationRef}>
+  <button
+    type="button"
+    onClick={() => {
+      setNotificationsOpen((v) => !v);
+
+      setNotificationFilter("all");
+      setNotificationPage(1);
+
+      void loadNotifications({
+        page: 1,
+        append: false,
+        filter: "all",
+      });
+    }}
+    className="relative rounded-[18px] p-2 transition hover:bg-white/10"
+  >
+    <Bell size={32} />
+
+    {unreadCount > 0 && (
+      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs min-w-5 h-5 px-1 rounded-full flex items-center justify-center font-bold">
+        {unreadCount > 9 ? "9+" : unreadCount}
+      </span>
+    )}
+  </button>
+
+  {notificationsOpen && (
+    <div className="absolute right-0 mt-4 w-[390px] bg-white text-slate-800 rounded-[22px] shadow-xl z-50 overflow-hidden">
+      <div className="px-4 py-4 border-b border-slate-100">
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => {
-                    setNotificationsOpen((v) => !v);
-
-                    setNotificationFilter("all");
-                    setNotificationPage(1);
-
-                    void loadNotifications({
-                      page: 1,
-                      append: false,
-                      filter: "all",
-                    });
-                  }}
-            className="relative rounded-[18px] p-2 transition hover:bg-white/10"
+            onClick={() =>
+              void changeNotificationFilter("all")
+            }
+            className={`inline-flex min-w-[95px] items-center justify-center rounded-full px-4 py-2.5 text-xs font-bold transition ${
+              notificationFilter === "all"
+                ? "bg-[#123A5C] text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
           >
-            <Bell size={32} />
+            {t("notificationsAll")}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              void changeNotificationFilter("unread")
+            }
+            className={`inline-flex min-w-[150px] items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-bold transition ${
+              notificationFilter === "unread"
+                ? "bg-[#123A5C] text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <span className="whitespace-nowrap">
+              {t("notificationsUnread")}
+            </span>
 
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs min-w-5 h-5 px-1 rounded-full flex items-center justify-center font-bold">
-                {unreadCount > 9 ? "9+" : unreadCount}
+              <span
+                className={`inline-flex min-w-[26px] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-black ${
+                  notificationFilter === "unread"
+                    ? "bg-white text-[#123A5C]"
+                    : "bg-[#123A5C] text-white"
+                }`}
+              >
+                {unreadCount}
               </span>
             )}
           </button>
+        </div>
+      </div>
 
-          {notificationsOpen && (
-            <div className="absolute right-0 mt-4 w-[390px] bg-white text-slate-800 rounded-[22px] shadow-xl z-50 overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                              <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void changeNotificationFilter("all")
-                  }
-                  className={`rounded-full px-4 py-2 text-xs font-bold transition ${
-                    notificationFilter === "all"
-                      ? "bg-[#123A5C] text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  Todas
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    void changeNotificationFilter(
-                      "unread"
-                    )
-                  }
-                  className={`rounded-full px-4 py-2 text-xs font-bold transition ${
-                    notificationFilter === "unread"
-                      ? "bg-[#123A5C] text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  Não lidas
-                  {unreadCount > 0 && (
-                    <span className="ml-2">
-                      {unreadCount}
-                    </span>
-                  )}
-                </button>
-              </div>
-                <div>
-                  <h3 className="font-black text-slate-800">
-                    {t("notifications")}
-                  </h3>
-
-                  <p className="text-xs text-slate-500">
-                    {unreadCount} {t("unread")}
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => void loadNotifications()}
-                  className="text-xs font-bold text-[#123A5C]"
-                >
-                  {t("update")}
-                </button>
-              </div>
-
-              <div className="max-h-[420px] overflow-auto">
-                {notifications.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-slate-500">
-                    {t("noNotifications")}
-                  </div>
-                ) : (
-                  notifications.map((notification) => (
-                    <button
-                      key={notification.id}
-                      onClick={() => openNotification(notification)}
-                      className={`w-full text-left px-5 py-4 border-b border-slate-100 hover:bg-slate-50 flex gap-3 ${
-                        !notification.isRead
-                          ? "bg-[#123A5C]/5"
-                          : "bg-white"
-                      }`}
-                    >
-                      <div
-                        className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 ${notificationColor(
-                          notification.type
-                        )}`}
-                      >
-                        {notificationIcon(notification.type)}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-bold text-sm text-slate-800 truncate">
-                            {notification.title}
-                          </p>
-
-                          {!notification.isRead && (
-                            <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
-                          )}
-                        </div>
-
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                          {notification.message}
-                        </p>
-
-                        <p className="text-[11px] text-slate-400 mt-2">
-                          {formatDate(notification.createdAt)}
-                        </p>
-                      </div>
-                    </button>
-                  ))
+      <div className="max-h-[420px] overflow-auto">
+        {notifications.length === 0 ? (
+          <div className="p-6 text-center text-sm text-slate-500">
+            {t("noNotifications")}
+          </div>
+        ) : (
+          notifications.map((notification) => (
+            <button
+              key={notification.id}
+              onClick={() =>
+                openNotification(notification)
+              }
+              className={`w-full text-left px-5 py-4 border-b border-slate-100 hover:bg-slate-50 flex gap-3 ${
+                !notification.isRead
+                  ? "bg-[#123A5C]/5"
+                  : "bg-white"
+              }`}
+            >
+              <div
+                className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 ${notificationColor(
+                  notification.type
+                )}`}
+              >
+                {notificationIcon(
+                  notification.type
                 )}
-
-                {notificationsHasMore && (
-                <div className="p-3 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void loadMoreNotifications()
-                    }
-                    disabled={
-                      notificationsLoadingMore
-                    }
-                    className="w-full rounded-[12px] bg-slate-100 px-4 py-3 text-xs font-bold text-[#123A5C] hover:bg-slate-200 disabled:opacity-50"
-                  >
-                    {notificationsLoadingMore
-                      ? "A carregar..."
-                      : "Carregar mais"}
-                  </button>
-                </div>
-              )}
               </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-bold text-sm text-slate-800 truncate">
+                    {notification.title}
+                  </p>
+
+                  {!notification.isRead && (
+                    <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                  {notification.message}
+                </p>
+
+                <p className="text-[11px] text-slate-400 mt-2">
+                  {formatDate(
+                    notification.createdAt
+                  )}
+                </p>
+              </div>
+            </button>
+          ))
+        )}
+
+        {notificationsHasMore &&
+          notifications.length > 0 && (
+            <div className="p-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() =>
+                  void loadMoreNotifications()
+                }
+                disabled={
+                  notificationsLoadingMore
+                }
+                className="w-full rounded-[12px] bg-slate-100 px-4 py-3 text-xs font-bold text-[#123A5C] hover:bg-slate-200 disabled:opacity-50"
+              >
+                {notificationsLoadingMore
+                  ? t("notificationsLoading")
+                  : t("notificationsLoadMore")}
+              </button>
             </div>
           )}
-        </div>
+      </div>
+    </div>
+  )}
+</div>
 
         <div className="relative" ref={settingsRef}>
   <button

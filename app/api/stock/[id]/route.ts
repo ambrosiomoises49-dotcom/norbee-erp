@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
-import { repairZeroCostTransferBatches } from "@/lib/fifo";
 
 type ProductBody = {
   name?: string;
@@ -20,6 +19,11 @@ type TransactionClient = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
+function toNumber(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -30,12 +34,6 @@ export async function PATCH(
 
     const body = (await request.json()) as ProductBody;
 
-    /*
-     * ============================================================
-     * VERIFICAR PRODUTO
-     * ============================================================
-     */
-
     const product = await prisma.product.findFirst({
       where: {
         id,
@@ -45,137 +43,82 @@ export async function PATCH(
 
     if (!product) {
       return NextResponse.json(
-        {
-          message: "Produto não encontrado.",
-        },
-        {
-          status: 404,
-        }
+        { message: "Produto não encontrado." },
+        { status: 404 }
       );
     }
 
-    /*
-     * ============================================================
-     * ATUALIZAÇÃO + REPARAÇÃO FIFO
-     *
-     * Tudo acontece na mesma transação.
-     *
-     * A reparação NÃO altera todos os lotes.
-     *
-     * Só poderá alterar lotes:
-     *
-     * - desta empresa
-     * - deste produto
-     * - numa cantina
-     * - sourceType = TRANSFER_IN
-     * - remainingQuantity > 0
-     * - unitCost = 0
-     * - com lote central de origem válido
-     * - cujo lote central tenha custo > 0
-     *
-     * ============================================================
-     */
+    const purchasePrice = toNumber(body.purchasePrice);
+    const salePrice = toNumber(body.salePrice);
+    const minStock = toNumber(body.minStock);
 
-    const result = await prisma.$transaction(
+    const updatedProduct = await prisma.$transaction(
       async (tx: TransactionClient) => {
-        const updatedProduct =
-          await tx.product.update({
-            where: {
-              id,
-            },
-
-            data: {
-              name: body.name,
-
-              internalCode:
-                body.internalCode,
-
-              barcode:
-                body.barcode || null,
-
-              unit:
-                body.unit || "UN",
-
-              categoryId:
-                body.categoryId || null,
-
-              supplierId:
-                body.supplierId || null,
-
-              purchasePrice:
-                Number(
-                  body.purchasePrice || 0
-                ),
-
-              salePrice:
-                Number(
-                  body.salePrice || 0
-                ),
-
-              minStock:
-                Number(
-                  body.minStock || 0
-                ),
-            },
-          });
+        const updated = await tx.product.update({
+          where: { id },
+          data: {
+            name: body.name,
+            internalCode: body.internalCode,
+            barcode: body.barcode || null,
+            unit: body.unit || "UN",
+            categoryId: body.categoryId || null,
+            supplierId: body.supplierId || null,
+            purchasePrice,
+            salePrice,
+            minStock,
+          },
+        });
 
         /*
-         * ========================================================
-         * REPARAR EVENTUAIS TRANSFERÊNCIAS COM CUSTO ZERO
+         * CORREÇÃO SEGURA DOS LOTES FIFO:
+         * - só para lotes ainda abertos (remainingQuantity > 0)
+         * - só quando o custo atual está a 0
+         * - só quando o novo purchasePrice > 0
          *
-         * Importante:
-         *
-         * Não utilizamos purchasePrice para inventar o custo.
-         *
-         * repairZeroCostTransferBatches procura o lote central
-         * através de sourceId e copia o custo FIFO real da origem.
-         *
-         * Isto também permite reparar produtos que JÁ tiveram
-         * o preço corrigido anteriormente.
-         * ========================================================
+         * Isto corrige empresas que lançaram produto/transferência
+         * com custo zero por engano.
          */
-
-        const fifoRepair =
-          await repairZeroCostTransferBatches({
-            tx,
-            companyId:
-              session.companyId,
-
-            productId:
-              id,
+        if (purchasePrice > 0) {
+          await tx.stockBatch.updateMany({
+            where: {
+              companyId: session.companyId,
+              productId: id,
+              remainingQuantity: {
+                gt: 0,
+              },
+              unitCost: 0,
+            },
+            data: {
+              unitCost: purchasePrice,
+            },
           });
 
-        return {
-          updatedProduct,
-          fifoRepair,
-        };
+          await tx.centralStock.updateMany({
+            where: {
+              companyId: session.companyId,
+              productId: id,
+              avgCost: 0,
+            },
+            data: {
+              avgCost: purchasePrice,
+            },
+          });
+        }
+
+        return updated;
       }
     );
 
     return NextResponse.json({
-      message:
-        "Produto atualizado com sucesso.",
-
-      product:
-        result.updatedProduct,
-
-      fifoRepair:
-        result.fifoRepair,
+      message: "Produto atualizado com sucesso.",
+      product: updatedProduct,
     });
   } catch (error) {
-    console.error(
-      "ERRO AO EDITAR PRODUTO:",
-      error
-    );
+    console.error(error);
 
     return NextResponse.json(
-      {
-        message:
-          "Erro ao editar produto.",
-      },
-      {
-        status: 500,
-      }
+      { message: "Erro ao editar produto." },
+      { status: 500 }
     );
   }
 }
@@ -188,31 +131,23 @@ export async function DELETE(
     const session = await requireAdmin();
     const { id } = await params;
 
-    const product =
-      await prisma.product.findFirst({
-        where: {
-          id,
-          companyId:
-            session.companyId,
-        },
-
-        include: {
-          saleItems: true,
-          purchaseItems: true,
-          transferItems: true,
-          stockMovements: true,
-        },
-      });
+    const product = await prisma.product.findFirst({
+      where: {
+        id,
+        companyId: session.companyId,
+      },
+      include: {
+        saleItems: true,
+        purchaseItems: true,
+        transferItems: true,
+        stockMovements: true,
+      },
+    });
 
     if (!product) {
       return NextResponse.json(
-        {
-          message:
-            "Produto não encontrado.",
-        },
-        {
-          status: 404,
-        }
+        { message: "Produto não encontrado." },
+        { status: 404 }
       );
     }
 
@@ -222,19 +157,10 @@ export async function DELETE(
       product.transferItems.length > 0 ||
       product.stockMovements.length > 0;
 
-    /*
-     * Se o produto possui histórico,
-     * preservamos os relatórios.
-     */
     if (hasHistory) {
       await prisma.product.update({
-        where: {
-          id,
-        },
-
-        data: {
-          status: "INACTIVE",
-        },
+        where: { id },
+        data: { status: "INACTIVE" },
       });
 
       return NextResponse.json({
@@ -243,54 +169,35 @@ export async function DELETE(
       });
     }
 
-    /*
-     * Produto sem histórico:
-     * pode ser eliminado definitivamente.
-     */
-    await prisma.$transaction(
-      async (tx: TransactionClient) => {
-        await tx.centralStock.deleteMany({
-          where: {
-            productId: id,
-            companyId:
-              session.companyId,
-          },
-        });
+    await prisma.$transaction(async (tx: TransactionClient) => {
+      await tx.centralStock.deleteMany({
+        where: {
+          productId: id,
+          companyId: session.companyId,
+        },
+      });
 
-        await tx.cantinaStock.deleteMany({
-          where: {
-            productId: id,
-            companyId:
-              session.companyId,
-          },
-        });
+      await tx.cantinaStock.deleteMany({
+        where: {
+          productId: id,
+          companyId: session.companyId,
+        },
+      });
 
-        await tx.product.delete({
-          where: {
-            id,
-          },
-        });
-      }
-    );
+      await tx.product.delete({
+        where: { id },
+      });
+    });
 
     return NextResponse.json({
-      message:
-        "Produto apagado definitivamente.",
+      message: "Produto apagado definitivamente.",
     });
   } catch (error) {
-    console.error(
-      "ERRO AO APAGAR PRODUTO:",
-      error
-    );
+    console.error(error);
 
     return NextResponse.json(
-      {
-        message:
-          "Erro ao apagar produto.",
-      },
-      {
-        status: 500,
-      }
+      { message: "Erro ao apagar produto." },
+      { status: 500 }
     );
   }
 }
