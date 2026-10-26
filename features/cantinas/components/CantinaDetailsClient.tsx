@@ -33,13 +33,21 @@ import {
 type SaleItem = {
   id: string;
   quantity: number;
+  unitCost?: string;
   totalPrice?: string;
-  product?: { name: string };
+  grossProfit?: string;
+
+  product?: {
+    id: string;
+    name: string;
+  };
 };
 
 type Sale = {
   id: string;
   saleNumber: string;
+  subtotal: string;
+  taxAmount?: string;
   totalAmount: string;
   paymentMethod: string;
   createdAt: string;
@@ -131,11 +139,27 @@ type CantinaDetails = {
 };
 
 type ViewMode = "overview" | "daily" | "monthly" | "report";
+type TopProductsSort =
+  | "balanced"
+  | "quantity"
+  | "profit";
+
+type TopProductRow = {
+  productId: string;
+  name: string;
+  quantity: number;
+  total: number;
+  profit: number;
+  margin: number;
+  score: number;
+};
 
 const REPORT_ITEMS_PER_PAGE = 4;
 const MONTH_ITEMS_PER_PAGE = 6;
 const STOCK_TX_PER_PAGE = 7;
 const STOCK_PRODUCTS_PER_PAGE = 10;
+const TOP_PRODUCTS_PER_PAGE = 25;
+const TOP_PRODUCTS_LIMIT = 100;
 
 export default function CantinaDetailsClient({ id }: { id: string }) {
   const router = useRouter();
@@ -151,6 +175,14 @@ export default function CantinaDetailsClient({ id }: { id: string }) {
   const [stockProductsOpen, setStockProductsOpen] = useState(false);
   const [stockProductsPage, setStockProductsPage] = useState(1);
   const [deadStockOpen, setDeadStockOpen] = useState(false);
+  const [topProductsOpen, setTopProductsOpen] =
+  useState(false);
+
+  const [topProductsPage, setTopProductsPage] =
+  useState(1);
+
+  const [topProductsSort, setTopProductsSort] =
+  useState<TopProductsSort>("balanced");
 
   const [dailyPage, setDailyPage] = useState<1 | 2>(1);
   const [reportStart, setReportStart] = useState("");
@@ -345,6 +377,222 @@ const paginatedStockProducts = stockWithTransfers.slice(
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
   }, [sales, lang]);
+
+  const rankedTopProducts = useMemo(() => {
+  const map = new Map<
+    string,
+    {
+      productId: string;
+      name: string;
+      quantity: number;
+      total: number;
+      profit: number;
+    }
+  >();
+
+  sales.forEach((sale) => {
+    const saleSubtotal = Number(
+      sale.subtotal || 0
+    );
+
+    const saleTotal = Number(
+      sale.totalAmount || 0
+    );
+
+    const taxAmount = Number(
+      sale.taxAmount || 0
+    );
+
+    /*
+     * Receita real dos produtos depois do desconto.
+     *
+     * Exemplo:
+     * subtotal = 2 000
+     * total = 1 500
+     *
+     * factor = 0.75
+     *
+     * Cada item recebe proporcionalmente
+     * 75% da sua receita bruta.
+     */
+    const netProductTotal =
+      Math.max(0, saleTotal - taxAmount);
+
+    const revenueFactor =
+      saleSubtotal > 0
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              netProductTotal / saleSubtotal
+            )
+          )
+        : 1;
+
+    sale.items?.forEach((item) => {
+      const productId =
+        item.product?.id ||
+        item.id;
+
+      const name =
+        item.product?.name ||
+        t("unknownProduct");
+
+      const quantity =
+        Number(item.quantity || 0);
+
+      const grossRevenue =
+        Number(item.totalPrice || 0);
+
+      /*
+       * Receita efetiva do item depois
+       * do desconto proporcional.
+       */
+      const revenue =
+        grossRevenue * revenueFactor;
+
+      /*
+       * Custo FIFO efetivamente usado
+       * naquela venda.
+       */
+      const fifoCost =
+        Number(item.unitCost || 0) *
+        quantity;
+
+      const profit =
+        revenue - fifoCost;
+
+      const current =
+        map.get(productId) || {
+          productId,
+          name,
+          quantity: 0,
+          total: 0,
+          profit: 0,
+        };
+
+      current.quantity += quantity;
+      current.total += revenue;
+      current.profit += profit;
+
+      map.set(productId, current);
+    });
+  });
+
+  const rows = Array.from(
+    map.values()
+  );
+
+  const maxQuantity = Math.max(
+    0,
+    ...rows.map(
+      (row) => row.quantity
+    )
+  );
+
+  const maxProfit = Math.max(
+    0,
+    ...rows.map(
+      (row) =>
+        Math.max(0, row.profit)
+    )
+  );
+
+  const ranked: TopProductRow[] =
+    rows.map((row) => {
+      const quantityScore =
+        maxQuantity > 0
+          ? row.quantity /
+            maxQuantity
+          : 0;
+
+      const profitScore =
+        maxProfit > 0
+          ? Math.max(
+              0,
+              row.profit
+            ) / maxProfit
+          : 0;
+
+      /*
+       * Ranking equilibrado:
+       *
+       * 50% quantidade
+       * 50% lucro
+       */
+      const score =
+        quantityScore * 0.5 +
+        profitScore * 0.5;
+
+      const margin =
+        row.total > 0
+          ? (row.profit /
+              row.total) *
+            100
+          : 0;
+
+      return {
+        ...row,
+        margin,
+        score,
+      };
+    });
+
+  ranked.sort((a, b) => {
+    if (
+      topProductsSort === "quantity"
+    ) {
+      return (
+        b.quantity - a.quantity ||
+        b.profit - a.profit
+      );
+    }
+
+    if (
+      topProductsSort === "profit"
+    ) {
+      return (
+        b.profit - a.profit ||
+        b.quantity - a.quantity
+      );
+    }
+
+    /*
+     * Equilíbrio quantidade + lucro.
+     */
+    return (
+      b.score - a.score ||
+      b.profit - a.profit ||
+      b.quantity - a.quantity
+    );
+  });
+
+  return ranked.slice(
+    0,
+    TOP_PRODUCTS_LIMIT
+  );
+}, [
+  sales,
+  topProductsSort,
+  lang,
+]);
+const topProductsTotalPages =
+  Math.max(
+    1,
+    Math.ceil(
+      rankedTopProducts.length /
+        TOP_PRODUCTS_PER_PAGE
+    )
+  );
+
+const paginatedTopProducts =
+  rankedTopProducts.slice(
+    (topProductsPage - 1) *
+      TOP_PRODUCTS_PER_PAGE,
+
+    topProductsPage *
+      TOP_PRODUCTS_PER_PAGE
+  );
 
   const reportSales = useMemo(() => {
     if (!reportStart || !reportEnd) return [];
@@ -1099,7 +1347,15 @@ function downloadStockMonthlyClose() {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-            <CompactPanel title={t("top5Products")} icon={<TrendingUp size={16} />}>
+            <CompactPanel
+                  title={t("top5Products")}
+                  icon={<TrendingUp size={16} />}
+                  onTitleClick={() => {
+                    setTopProductsPage(1);
+                    setTopProductsSort("balanced");
+                    setTopProductsOpen(true);
+                  }}
+                >
               {topProducts.length === 0 ? (
                 <Empty
                   icon={<PackageSearch size={34} />}
@@ -1509,6 +1765,280 @@ function downloadStockMonthlyClose() {
           />
         </FullPanel>
       )}
+      {topProductsOpen && (
+  <div className="fixed left-[200px] top-[110px] right-0 bottom-0 z-40 bg-[#F4F7FA] p-5 overflow-hidden">
+    <div className="h-full bg-white rounded-[24px] shadow-xl flex flex-col overflow-hidden">
+
+      {/* CABEÇALHO */}
+      <div className="flex flex-col gap-4 px-6 py-4 border-b border-slate-100 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <TrendingUp
+              size={22}
+              className="text-[#123A5C]"
+            />
+
+            <h2 className="text-2xl font-bold text-slate-800">
+              {t("top100Products")}
+            </h2>
+          </div>
+
+          <p className="text-sm text-slate-500 mt-1">
+            {cantina.name} — {cantina.code}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setTopProductsSort(
+                "balanced"
+              );
+              setTopProductsPage(1);
+            }}
+            className={`rounded-[12px] px-4 py-2 text-sm font-semibold border ${
+              topProductsSort ===
+              "balanced"
+                ? "bg-[#123A5C] text-white border-[#123A5C]"
+                : "bg-white text-slate-600 border-slate-200 hover:border-[#123A5C]"
+            }`}
+          >
+            {t("balancedRanking")}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setTopProductsSort(
+                "quantity"
+              );
+              setTopProductsPage(1);
+            }}
+            className={`rounded-[12px] px-4 py-2 text-sm font-semibold border ${
+              topProductsSort ===
+              "quantity"
+                ? "bg-[#123A5C] text-white border-[#123A5C]"
+                : "bg-white text-slate-600 border-slate-200 hover:border-[#123A5C]"
+            }`}
+          >
+            {t("mostSold")}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setTopProductsSort(
+                "profit"
+              );
+              setTopProductsPage(1);
+            }}
+            className={`rounded-[12px] px-4 py-2 text-sm font-semibold border ${
+              topProductsSort ===
+              "profit"
+                ? "bg-[#123A5C] text-white border-[#123A5C]"
+                : "bg-white text-slate-600 border-slate-200 hover:border-[#123A5C]"
+            }`}
+          >
+            {t("highestProfit")}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setTopProductsOpen(false)
+            }
+            className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800"
+          >
+            <X size={24} />
+          </button>
+        </div>
+      </div>
+
+      {/* EXPLICAÇÃO */}
+      <div className="px-6 pt-4">
+        <div className="rounded-[16px] bg-[#123A5C]/5 border border-[#123A5C]/10 px-4 py-3">
+          <p className="text-xs text-slate-600">
+            {topProductsSort ===
+            "balanced"
+              ? t(
+                  "balancedRankingDescription"
+                )
+              : topProductsSort ===
+                "quantity"
+              ? t(
+                  "quantityRankingDescription"
+                )
+              : t(
+                  "profitRankingDescription"
+                )}
+          </p>
+        </div>
+      </div>
+
+      {/* CONTEÚDO */}
+      <div className="flex-1 p-6 overflow-auto">
+        {rankedTopProducts.length ===
+        0 ? (
+          <Empty
+            icon={
+              <PackageSearch
+                size={46}
+              />
+            }
+            text={t(
+              "noProductSoldYet"
+            )}
+          />
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-slate-500">
+                {
+                  rankedTopProducts.length
+                }{" "}
+                {t("products")}
+              </p>
+
+              <span className="rounded-full bg-[#123A5C]/10 px-4 py-2 text-xs font-bold text-[#123A5C]">
+                Top 100
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-[18px] border">
+              <table className="w-full min-w-[1000px] text-sm text-center">
+                <thead className="bg-slate-50 text-slate-500 sticky top-0">
+                  <tr>
+                    <th className="px-5 py-4 text-center">
+                      #
+                    </th>
+
+                    <th className="px-5 py-4 text-center">
+                      {t("product")}
+                    </th>
+
+                    <th className="px-5 py-4 text-center">
+                      {t("qty")}
+                    </th>
+
+                    <th className="px-5 py-4 text-center">
+                      {t("total")}
+                    </th>
+
+                    <th className="px-5 py-4 text-center">
+                      {t("margin")}
+                    </th>
+
+                    <th className="px-5 py-4 text-center">
+                      {t("profit")}
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedTopProducts.map(
+                    (product, index) => {
+                      const position =
+                        (topProductsPage -
+                          1) *
+                          TOP_PRODUCTS_PER_PAGE +
+                        index +
+                        1;
+
+                      return (
+                        <tr
+                          key={
+                            product.productId
+                          }
+                          className="hover:bg-slate-50"
+                        >
+                          <td className="px-5 py-4 font-black text-[#123A5C]">
+                            {position}
+                          </td>
+
+                          <td className="px-5 py-4 font-semibold text-slate-800">
+                            {
+                              product.name
+                            }
+                          </td>
+
+                          <td className="px-5 py-4 font-bold">
+                            {
+                              product.quantity
+                            }
+                          </td>
+
+                          <td className="px-5 py-4">
+                            {formatMoney(
+                              product.total
+                            )}
+                          </td>
+
+                          <td
+                            className={`px-5 py-4 font-bold ${
+                              product.margin <
+                              0
+                                ? "text-red-600"
+                                : "text-[#123A5C]"
+                            }`}
+                          >
+                            {product.margin.toFixed(
+                              1
+                            )}
+                            %
+                          </td>
+
+                          <td
+                            className={`px-5 py-4 font-black ${
+                              product.profit <
+                              0
+                                ? "text-red-600"
+                                : "text-green-700"
+                            }`}
+                          >
+                            {formatMoney(
+                              product.profit
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              page={topProductsPage}
+              totalPages={
+                topProductsTotalPages
+              }
+              t={t}
+              onPrev={() =>
+                setTopProductsPage(
+                  (p) =>
+                    Math.max(
+                      1,
+                      p - 1
+                    )
+                )
+              }
+              onNext={() =>
+                setTopProductsPage(
+                  (p) =>
+                    Math.min(
+                      topProductsTotalPages,
+                      p + 1
+                    )
+                )
+              }
+            />
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+)}
           {deadStockOpen && (
   <div className="fixed left-[200px] top-[110px] right-0 bottom-0 z-40 bg-[#F4F7FA] p-5 overflow-hidden">
     <div className="h-full bg-white rounded-[24px] shadow-xl flex flex-col overflow-hidden">
@@ -2279,17 +2809,45 @@ function CompactPanel({
   title,
   children,
   icon,
+  onTitleClick,
 }: {
   title: string;
   children: React.ReactNode;
   icon?: React.ReactNode;
+  onTitleClick?: () => void;
 }) {
   return (
     <div className="bg-white rounded-[18px] p-4 shadow-sm min-h-[165px]">
-      <div className="flex items-center gap-2 mb-3">
-        {icon && <div className="text-[#123A5C]">{icon}</div>}
-        <h2 className="text-sm font-bold text-slate-800">{title}</h2>
-      </div>
+      {onTitleClick ? (
+        <button
+          type="button"
+          onClick={onTitleClick}
+          className="flex items-center gap-2 mb-3 group"
+        >
+          {icon && (
+            <div className="text-[#123A5C]">
+              {icon}
+            </div>
+          )}
+
+          <h2 className="text-sm font-bold text-slate-800 group-hover:text-[#123A5C] group-hover:underline">
+            {title}
+          </h2>
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 mb-3">
+          {icon && (
+            <div className="text-[#123A5C]">
+              {icon}
+            </div>
+          )}
+
+          <h2 className="text-sm font-bold text-slate-800">
+            {title}
+          </h2>
+        </div>
+      )}
+
       {children}
     </div>
   );

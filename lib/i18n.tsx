@@ -36,6 +36,60 @@ type Dictionary = Record<
 
 const dictionary: Dictionary = {
 
+  top100Products: {
+  pt: "Top 100 produtos",
+  fr: "Top 100 produits",
+  en: "Top 100 products",
+},
+
+balancedRanking: {
+  pt: "Equilíbrio",
+  fr: "Équilibre",
+  en: "Balanced",
+},
+
+mostSold: {
+  pt: "Mais vendidos",
+  fr: "Plus vendus",
+  en: "Best sellers",
+},
+
+highestProfit: {
+  pt: "Maior lucro",
+  fr: "Plus rentable",
+  en: "Highest profit",
+},
+
+balancedRankingDescription: {
+  pt: "Ranking calculado com 50% de peso para a quantidade vendida e 50% para o lucro gerado.",
+  fr: "Classement calculé avec 50 % de poids sur la quantité vendue et 50 % sur le bénéfice généré.",
+  en: "Ranking calculated with 50% weight on quantity sold and 50% on profit generated.",
+},
+
+quantityRankingDescription: {
+  pt: "Produtos ordenados pela maior quantidade vendida.",
+  fr: "Produits classés selon la plus grande quantité vendue.",
+  en: "Products ranked by highest quantity sold.",
+},
+
+profitRankingDescription: {
+  pt: "Produtos ordenados pelo maior lucro gerado.",
+  fr: "Produits classés selon le bénéfice généré le plus élevé.",
+  en: "Products ranked by highest profit generated.",
+},
+
+margin: {
+  pt: "Margem",
+  fr: "Marge",
+  en: "Margin",
+},
+
+profit: {
+  pt: "Lucro",
+  fr: "Bénéfice",
+  en: "Profit",
+},
+
   notificationsAll: {
   pt: "Todas",
   fr: "Toutes",
@@ -1084,12 +1138,6 @@ transport: {
   pt: "Transporte",
   fr: "Transport",
   en: "Transport",
-},
-
-margin: {
-  pt: "Margem",
-  fr: "Marge",
-  en: "Margin",
 },
 
 table: {
