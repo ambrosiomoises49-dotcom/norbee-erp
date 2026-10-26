@@ -7,8 +7,15 @@ type TransactionClient = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
-type FinanceTransactionType = "INCOME" | "EXPENSE";
-type FinancialAccountTypeValue = "CASH" | "BANK" | "MOBILE_MONEY" | "OTHER";
+type FinanceTransactionType =
+  | "INCOME"
+  | "EXPENSE";
+
+type FinancialAccountTypeValue =
+  | "CASH"
+  | "BANK"
+  | "MOBILE_MONEY"
+  | "OTHER";
 
 type FinanceBody = {
   type?: FinanceTransactionType;
@@ -18,13 +25,16 @@ type FinanceBody = {
   financialAccountId?: string | null;
 };
 
-async function ensureDefaultAccount(companyId: string) {
-  const existing = await prisma.financialAccount.findFirst({
-    where: {
-      companyId,
-      isDefault: true,
-    },
-  });
+async function ensureDefaultAccount(
+  companyId: string
+) {
+  const existing =
+    await prisma.financialAccount.findFirst({
+      where: {
+        companyId,
+        isDefault: true,
+      },
+    });
 
   if (existing) return existing;
 
@@ -40,49 +50,107 @@ async function ensureDefaultAccount(companyId: string) {
   });
 }
 
-export async function GET(request: Request) {
+export async function GET(
+  request: Request
+) {
   try {
-    const session = await requireAdmin();
-    const { searchParams } = new URL(request.url);
+    const session =
+      await requireAdmin();
 
-    const type = searchParams.get("type");
-    const referenceType = searchParams.get("referenceType");
-    const accountId = searchParams.get("accountId");
-    const start = searchParams.get("start");
-    const end = searchParams.get("end");
+    const { searchParams } =
+      new URL(request.url);
 
-    await ensureDefaultAccount(session.companyId);
+    const type =
+      searchParams.get("type");
 
-    const [accounts, transactions] = await Promise.all([
+    const referenceType =
+      searchParams.get(
+        "referenceType"
+      );
+
+    const accountId =
+      searchParams.get("accountId");
+
+    const start =
+      searchParams.get("start");
+
+    const end =
+      searchParams.get("end");
+
+    await ensureDefaultAccount(
+      session.companyId
+    );
+
+    const [
+      accounts,
+      transactions,
+    ] = await Promise.all([
       prisma.financialAccount.findMany({
         where: {
-          companyId: session.companyId,
-          status: "ACTIVE",
+          companyId:
+            session.companyId,
+
+          status:
+            "ACTIVE",
         },
+
         orderBy: {
-          createdAt: "asc",
+          createdAt:
+            "asc",
         },
       }),
 
       prisma.financeTransaction.findMany({
         where: {
-          companyId: session.companyId,
-          ...(type && type !== "ALL"
-            ? { type: type as FinanceTransactionType }
+          companyId:
+            session.companyId,
+
+          ...(type &&
+          type !== "ALL"
+            ? {
+                type:
+                  type as FinanceTransactionType,
+              }
             : {}),
-          ...(referenceType && referenceType !== "ALL"
-            ? { referenceType }
+
+          ...(referenceType &&
+          referenceType !== "ALL"
+            ? {
+                referenceType,
+              }
             : {}),
-          ...(accountId && accountId !== "ALL"
-            ? { financialAccountId: accountId }
+
+          ...(accountId &&
+          accountId !== "ALL"
+            ? {
+                financialAccountId:
+                  accountId,
+              }
             : {}),
+
           date: {
-            ...(start ? { gte: new Date(start) } : {}),
-            ...(end ? { lte: new Date(`${end}T23:59:59`) } : {}),
+            ...(start
+              ? {
+                  gte:
+                    new Date(start),
+                }
+              : {}),
+
+            ...(end
+              ? {
+                  lte:
+                    new Date(
+                      `${end}T23:59:59`
+                    ),
+                }
+              : {}),
           },
         },
+
         include: {
-          financialAccount: true,
+          financialAccount:
+            true,
+
           user: {
             select: {
               name: true,
@@ -90,8 +158,10 @@ export async function GET(request: Request) {
             },
           },
         },
+
         orderBy: {
-          date: "desc",
+          date:
+            "desc",
         },
       }),
     ]);
@@ -101,89 +171,261 @@ export async function GET(request: Request) {
       transactions,
     });
   } catch (error) {
-    console.error("ERRO API FINANCAS GET:", error);
+    console.error(
+      "ERRO API FINANCAS GET:",
+      error
+    );
 
     return NextResponse.json(
-      { message: "Erro ao carregar finanças." },
-      { status: 500 }
+      {
+        message:
+          "Erro ao carregar finanças.",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
   try {
-    const session = await requireAdmin();
-    const body = (await request.json()) as FinanceBody;
+    const session =
+      await requireAdmin();
 
-    const { type, amount, description, date, financialAccountId } = body;
+    const body =
+      (await request.json()) as FinanceBody;
+
+    const {
+      type,
+      amount,
+      description,
+      date,
+      financialAccountId,
+    } = body;
 
     if (!type || !amount) {
       return NextResponse.json(
-        { message: "Tipo e valor são obrigatórios." },
-        { status: 400 }
+        {
+          message:
+            "Tipo e valor são obrigatórios.",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    if (!["INCOME", "EXPENSE"].includes(type)) {
+    if (
+      ![
+        "INCOME",
+        "EXPENSE",
+      ].includes(type)
+    ) {
       return NextResponse.json(
-        { message: "Tipo inválido." },
-        { status: 400 }
+        {
+          message:
+            "Tipo inválido.",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    const amountValue = Number(amount);
+    const amountValue =
+      Number(amount);
 
-    if (amountValue <= 0) {
+    if (
+      !Number.isFinite(
+        amountValue
+      ) ||
+      amountValue <= 0
+    ) {
       return NextResponse.json(
-        { message: "O valor deve ser superior a zero." },
-        { status: 400 }
+        {
+          message:
+            "O valor deve ser superior a zero.",
+        },
+        {
+          status: 400,
+        }
       );
     }
+
+    /*
+     * ========================================================
+     * DETERMINAR CONTA
+     * ========================================================
+     */
+
+    let accountId =
+      financialAccountId ||
+      null;
+
+    if (!accountId) {
+      const defaultAccount =
+        await ensureDefaultAccount(
+          session.companyId
+        );
+
+      accountId =
+        defaultAccount.id;
+    }
+
+    /*
+     * ========================================================
+     * VALIDAR QUE A CONTA:
+     *
+     * - existe
+     * - pertence à empresa atual
+     * - está ativa
+     *
+     * ========================================================
+     */
 
     const account =
-      financialAccountId ||
-      (await ensureDefaultAccount(session.companyId)).id;
+      await prisma.financialAccount.findFirst({
+        where: {
+          id:
+            accountId,
 
-    const transaction = await prisma.$transaction(
-      async (tx: TransactionClient) => {
-        const created = await tx.financeTransaction.create({
-          data: {
-            companyId: session.companyId,
-            userId: session.userId,
-            financialAccountId: account,
-            type,
-            amount: amountValue,
-            description: description || null,
-            date: date ? new Date(date) : new Date(),
-            referenceType: "MANUAL",
-            referenceId: null,
-          },
-        });
+          companyId:
+            session.companyId,
 
-        await tx.financialAccount.update({
-          where: { id: account },
-          data: {
-            balance:
-              type === "INCOME"
-                ? { increment: amountValue }
-                : { decrement: amountValue },
-          },
-        });
+          status:
+            "ACTIVE",
+        },
+      });
 
-        return created;
-      }
-    );
+    if (!account) {
+      return NextResponse.json(
+        {
+          message:
+            "Conta financeira inválida.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * NÃO PERMITIR SAÍDA MAIOR QUE O SALDO
+     * ========================================================
+     */
+
+    if (
+      type === "EXPENSE" &&
+      Number(account.balance) <
+        amountValue
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Saldo insuficiente na conta selecionada.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * TRANSAÇÃO FINANCEIRA
+     * ========================================================
+     */
+
+    const transaction =
+      await prisma.$transaction(
+        async (
+          tx: TransactionClient
+        ) => {
+          const created =
+            await tx.financeTransaction.create({
+              data: {
+                companyId:
+                  session.companyId,
+
+                userId:
+                  session.userId,
+
+                financialAccountId:
+                  account.id,
+
+                type,
+
+                amount:
+                  amountValue,
+
+                description:
+                  description ||
+                  null,
+
+                date:
+                  date
+                    ? new Date(
+                        date
+                      )
+                    : new Date(),
+
+                referenceType:
+                  "MANUAL",
+
+                referenceId:
+                  null,
+              },
+            });
+
+          await tx.financialAccount.update({
+            where: {
+              id:
+                account.id,
+            },
+
+            data: {
+              balance:
+                type ===
+                "INCOME"
+                  ? {
+                      increment:
+                        amountValue,
+                    }
+                  : {
+                      decrement:
+                        amountValue,
+                    },
+            },
+          });
+
+          return created;
+        }
+      );
 
     return NextResponse.json({
-      message: "Transação registada com sucesso.",
+      message:
+        "Transação registada com sucesso.",
+
       transaction,
     });
   } catch (error) {
-    console.error(error);
+    console.error(
+      "ERRO API FINANCAS POST:",
+      error
+    );
 
     return NextResponse.json(
-      { message: "Erro ao registar transação." },
-      { status: 500 }
+      {
+        message:
+          "Erro ao registar transação.",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }

@@ -1855,26 +1855,7 @@ function downloadStockMonthlyClose() {
         </div>
       </div>
 
-      {/* EXPLICAÇÃO */}
-      <div className="px-6 pt-4">
-        <div className="rounded-[16px] bg-[#123A5C]/5 border border-[#123A5C]/10 px-4 py-3">
-          <p className="text-xs text-slate-600">
-            {topProductsSort ===
-            "balanced"
-              ? t(
-                  "balancedRankingDescription"
-                )
-              : topProductsSort ===
-                "quantity"
-              ? t(
-                  "quantityRankingDescription"
-                )
-              : t(
-                  "profitRankingDescription"
-                )}
-          </p>
-        </div>
-      </div>
+    
 
       {/* CONTEÚDO */}
       <div className="flex-1 p-6 overflow-auto">
@@ -1892,19 +1873,6 @@ function downloadStockMonthlyClose() {
           />
         ) : (
           <>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-slate-500">
-                {
-                  rankedTopProducts.length
-                }{" "}
-                {t("products")}
-              </p>
-
-              <span className="rounded-full bg-[#123A5C]/10 px-4 py-2 text-xs font-bold text-[#123A5C]">
-                Top 100
-              </span>
-            </div>
-
             <div className="overflow-x-auto rounded-[18px] border">
               <table className="w-full min-w-[1000px] text-sm text-center">
                 <thead className="bg-slate-50 text-slate-500 sticky top-0">

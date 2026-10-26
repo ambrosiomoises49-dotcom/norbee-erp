@@ -76,7 +76,16 @@ export default function FinancasClient() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] =
+  useState(false);
 
+const [transferForm, setTransferForm] = useState({
+  sourceAccountId: "",
+  destinationAccountId: "",
+  amount: "",
+  description: "",
+  date: new Date().toISOString().slice(0, 10),
+});
   const [editingTransaction, setEditingTransaction] =
     useState<FinanceTransaction | null>(null);
   const [deletingTransaction, setDeletingTransaction] =
@@ -206,27 +215,72 @@ export default function FinancasClient() {
     page * ITEMS_PER_PAGE
   );
 
-  const stats = useMemo(() => {
-    const income = transactions
-      .filter((tx) => tx.type === "INCOME")
-      .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+ const stats = useMemo(() => {
+  const realTransactions =
+    transactions.filter(
+      (tx) =>
+        tx.referenceType !==
+        "TRANSFER"
+    );
 
-    const expense = transactions
-      .filter((tx) => tx.type === "EXPENSE")
-      .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+  const income =
+    realTransactions
+      .filter(
+        (tx) =>
+          tx.type ===
+          "INCOME"
+      )
+      .reduce(
+        (sum, tx) =>
+          sum +
+          Number(
+            tx.amount || 0
+          ),
+        0
+      );
 
-    const balance = accounts.reduce(
-      (sum, account) => sum + Number(account.balance || 0),
+  const expense =
+    realTransactions
+      .filter(
+        (tx) =>
+          tx.type ===
+          "EXPENSE"
+      )
+      .reduce(
+        (sum, tx) =>
+          sum +
+          Number(
+            tx.amount || 0
+          ),
+        0
+      );
+
+  const balance =
+    accounts.reduce(
+      (sum, account) =>
+        sum +
+        Number(
+          account.balance || 0
+        ),
       0
     );
 
-    return {
-      income,
-      expense,
-      balance,
-      total: transactions.length,
-    };
-  }, [transactions, accounts]);
+  return {
+    income,
+    expense,
+    balance,
+
+    /*
+     * Mantemos aqui todas as linhas
+     * de histórico, inclusive transferências.
+     */
+    total:
+      transactions.length,
+  };
+}, [
+  transactions,
+  accounts,
+]);
 
   function formatMoney(value: string | number) {
   const amount = Number(value || 0);
@@ -360,6 +414,152 @@ export default function FinancasClient() {
     }
   }
 
+  function openTransferModal() {
+  const defaultAccount =
+    accounts.find(
+      (account) => account.isDefault
+    ) ||
+    accounts[0] ||
+    null;
+
+  const firstDestination =
+    accounts.find(
+      (account) =>
+        account.id !== defaultAccount?.id
+    ) || null;
+
+  setTransferForm({
+    sourceAccountId:
+      defaultAccount?.id || "",
+
+    destinationAccountId:
+      firstDestination?.id || "",
+
+    amount: "",
+
+    description: "",
+
+    date:
+      new Date()
+        .toISOString()
+        .slice(0, 10),
+  });
+
+  setError("");
+  setMessage("");
+  setTransferModalOpen(true);
+}
+
+async function saveTransfer(
+  e: React.FormEvent<HTMLFormElement>
+) {
+  e.preventDefault();
+
+  setSaving(true);
+  setError("");
+  setMessage("");
+
+  try {
+    const amountValue =
+      Number(transferForm.amount);
+
+    if (
+      !transferForm.sourceAccountId ||
+      !transferForm.destinationAccountId
+    ) {
+      setError(
+        t("chooseTransferAccounts")
+      );
+
+      return;
+    }
+
+    if (
+      transferForm.sourceAccountId ===
+      transferForm.destinationAccountId
+    ) {
+      setError(
+        t("transferAccountsMustDiffer")
+      );
+
+      return;
+    }
+
+    if (
+      !Number.isFinite(amountValue) ||
+      amountValue <= 0
+    ) {
+      setError(
+        t("invalidTransferAmount")
+      );
+
+      return;
+    }
+
+    const sourceAccount =
+      accounts.find(
+        (account) =>
+          account.id ===
+          transferForm.sourceAccountId
+      );
+
+    if (
+      sourceAccount &&
+      Number(sourceAccount.balance || 0) <
+        amountValue
+    ) {
+      setError(
+        t("insufficientAccountBalance")
+      );
+
+      return;
+    }
+
+    const res = await fetch(
+      "/api/financas/transfer",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify(
+          transferForm
+        ),
+      }
+    );
+
+    const data =
+      await res.json();
+
+    if (!res.ok) {
+      setError(
+        data.message ||
+          t("transferError")
+      );
+
+      return;
+    }
+
+    setMessage(
+      data.message ||
+        t("transferSuccess")
+    );
+
+    setTransferModalOpen(false);
+
+    await loadTransactions();
+  } catch {
+    setError(
+      t("transferError")
+    );
+  } finally {
+    setSaving(false);
+  }
+}
+
   async function deleteTransaction() {
     if (!deletingTransaction) return;
 
@@ -400,6 +600,7 @@ export default function FinancasClient() {
     if (origin === "COST") return t("cost");
     if (origin === "SALARY") return t("salary");
     if (origin === "MANUAL") return t("manual");
+    if (origin === "TRANSFER") return t("transfer");
     return origin;
   }
 
@@ -461,7 +662,16 @@ export default function FinancasClient() {
             <WalletCards size={16} />
             {t("newAccount")}
           </button>
+              <button
+                    type="button"
+                    onClick={openTransferModal}
+                    disabled={accounts.length < 2}
+                    className="rounded-[14px] border px-4 py-2.5 text-sm font-semibold text-[#123A5C] hover:bg-[#123A5C] hover:text-white flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <WalletCards size={16} />
 
+                    {t("transfer")}
+                  </button>
           <button
             onClick={openNewTransaction}
             className="rounded-[14px] bg-[#123A5C] px-4 py-2.5 text-white text-sm font-semibold flex items-center gap-2 hover:bg-[#0B2540]"
@@ -602,6 +812,7 @@ export default function FinancasClient() {
               <option value="COST">{t("costs")}</option>
               <option value="SALARY">{t("salaries")}</option>
               <option value="MANUAL">{t("manualPlural")}</option>
+              <option value="TRANSFER">{t("transfer")}</option>
             </select>
 
             <select
@@ -772,7 +983,238 @@ export default function FinancasClient() {
             />
           </>
         )}
-      </div>{modalOpen && (
+      </div>
+      {transferModalOpen && (
+  <Modal
+    title={t("transferBetweenAccounts")}
+    onClose={() =>
+      setTransferModalOpen(false)
+    }
+    maxWidth="max-w-xl"
+  >
+    <form
+      onSubmit={saveTransfer}
+      className="space-y-4 mt-5"
+    >
+      {/* CONTA ORIGEM */}
+      <div>
+        <label className="block text-sm font-semibold text-slate-700 mb-2">
+          {t("sourceAccount")}
+        </label>
+
+        <select
+          required
+          value={
+            transferForm.sourceAccountId
+          }
+          onChange={(e) => {
+            const sourceAccountId =
+              e.target.value;
+
+            setTransferForm(
+              (prev) => ({
+                ...prev,
+
+                sourceAccountId,
+
+                destinationAccountId:
+                  prev.destinationAccountId ===
+                  sourceAccountId
+                    ? ""
+                    : prev.destinationAccountId,
+              })
+            );
+          }}
+          className="w-full border rounded-[14px] px-4 py-3 text-sm"
+        >
+          <option value="">
+            {t("chooseFinancialAccount")}
+          </option>
+
+          {accounts.map(
+            (account) => (
+              <option
+                key={account.id}
+                value={account.id}
+              >
+                {account.name} —{" "}
+                {formatMoney(
+                  account.balance
+                )}
+              </option>
+            )
+          )}
+        </select>
+      </div>
+
+      {/* CONTA DESTINO */}
+      <div>
+        <label className="block text-sm font-semibold text-slate-700 mb-2">
+          {t("destinationAccount")}
+        </label>
+
+        <select
+          required
+          value={
+            transferForm.destinationAccountId
+          }
+          onChange={(e) =>
+            setTransferForm(
+              (prev) => ({
+                ...prev,
+                destinationAccountId:
+                  e.target.value,
+              })
+            )
+          }
+          className="w-full border rounded-[14px] px-4 py-3 text-sm"
+        >
+          <option value="">
+            {t("chooseFinancialAccount")}
+          </option>
+
+          {accounts
+            .filter(
+              (account) =>
+                account.id !==
+                transferForm.sourceAccountId
+            )
+            .map(
+              (account) => (
+                <option
+                  key={account.id}
+                  value={account.id}
+                >
+                  {account.name} —{" "}
+                  {formatMoney(
+                    account.balance
+                  )}
+                </option>
+              )
+            )}
+        </select>
+      </div>
+
+      {/* VALOR */}
+      <div>
+        <label className="block text-sm font-semibold text-slate-700 mb-2">
+          {t("amount")}
+        </label>
+
+        <input
+          required
+          type="number"
+          min="0.01"
+          step="0.01"
+          value={
+            transferForm.amount
+          }
+          onChange={(e) =>
+            setTransferForm(
+              (prev) => ({
+                ...prev,
+                amount:
+                  e.target.value,
+              })
+            )
+          }
+          className="w-full border rounded-[14px] px-4 py-3 text-sm"
+          placeholder={t("amount")}
+        />
+
+        {transferForm.sourceAccountId && (
+          <p className="mt-2 text-xs text-slate-500">
+            {t("availableBalance")}:{" "}
+            {formatMoney(
+              accounts.find(
+                (account) =>
+                  account.id ===
+                  transferForm.sourceAccountId
+              )?.balance || 0
+            )}
+          </p>
+        )}
+      </div>
+
+      {/* DATA */}
+      <div>
+        <label className="block text-sm font-semibold text-slate-700 mb-2">
+          {t("date")}
+        </label>
+
+        <input
+          type="date"
+          value={
+            transferForm.date
+          }
+          onChange={(e) =>
+            setTransferForm(
+              (prev) => ({
+                ...prev,
+                date:
+                  e.target.value,
+              })
+            )
+          }
+          className="w-full border rounded-[14px] px-4 py-3 text-sm"
+        />
+      </div>
+
+      {/* DESCRIÇÃO */}
+      <div>
+        <label className="block text-sm font-semibold text-slate-700 mb-2">
+          {t("description")}
+        </label>
+
+        <textarea
+          value={
+            transferForm.description
+          }
+          onChange={(e) =>
+            setTransferForm(
+              (prev) => ({
+                ...prev,
+                description:
+                  e.target.value,
+              })
+            )
+          }
+          className="w-full border rounded-[14px] px-4 py-3 text-sm min-h-[90px]"
+          placeholder={t(
+            "transferDescriptionPlaceholder"
+          )}
+        />
+      </div>
+
+      <div className="rounded-[14px] bg-blue-50 px-4 py-3 text-xs text-blue-800">
+        {t("internalTransferInfo")}
+      </div>
+
+      <div className="flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() =>
+            setTransferModalOpen(false)
+          }
+          className="px-5 py-3 rounded-[16px] border"
+        >
+          {t("cancel")}
+        </button>
+
+        <button
+          disabled={saving}
+          className="px-5 py-3 rounded-[16px] bg-[#123A5C] text-white font-bold disabled:opacity-50"
+        >
+          {saving
+            ? t("saving")
+            : t("confirmTransfer")}
+        </button>
+      </div>
+    </form>
+  </Modal>
+)}
+      
+      {modalOpen && (
         <Modal
           title={
             editingTransaction

@@ -36,6 +36,84 @@ type Dictionary = Record<
 
 const dictionary: Dictionary = {
 
+  transfer: {
+  pt: "Transferir",
+  fr: "Transférer",
+  en: "Transfer",
+},
+
+transferBetweenAccounts: {
+  pt: "Transferir entre contas",
+  fr: "Transférer entre comptes",
+  en: "Transfer between accounts",
+},
+
+sourceAccount: {
+  pt: "Conta de origem",
+  fr: "Compte source",
+  en: "Source account",
+},
+
+destinationAccount: {
+  pt: "Conta de destino",
+  fr: "Compte destination",
+  en: "Destination account",
+},
+
+confirmTransfer: {
+  pt: "Confirmar transferência",
+  fr: "Confirmer le transfert",
+  en: "Confirm transfer",
+},
+
+transferSuccess: {
+  pt: "Transferência realizada com sucesso.",
+  fr: "Transfert effectué avec succès.",
+  en: "Transfer completed successfully.",
+},
+
+transferError: {
+  pt: "Erro ao realizar transferência.",
+  fr: "Erreur lors du transfert.",
+  en: "Error while transferring funds.",
+},
+
+chooseTransferAccounts: {
+  pt: "Escolha a conta de origem e a conta de destino.",
+  fr: "Choisissez le compte source et le compte destination.",
+  en: "Choose the source and destination accounts.",
+},
+
+transferAccountsMustDiffer: {
+  pt: "A conta de origem e a conta de destino devem ser diferentes.",
+  fr: "Le compte source et le compte destination doivent être différents.",
+  en: "Source and destination accounts must be different.",
+},
+
+invalidTransferAmount: {
+  pt: "Introduza um valor válido para a transferência.",
+  fr: "Saisissez un montant valide pour le transfert.",
+  en: "Enter a valid transfer amount.",
+},
+
+insufficientAccountBalance: {
+  pt: "Saldo insuficiente na conta selecionada.",
+  fr: "Solde insuffisant sur le compte sélectionné.",
+  en: "Insufficient balance in the selected account.",
+},
+
+internalTransferInfo: {
+  pt: "Esta operação apenas move dinheiro entre contas da empresa. Não altera as entradas, saídas nem o lucro.",
+  fr: "Cette opération déplace uniquement l'argent entre les comptes de l'entreprise. Elle ne modifie ni les entrées, ni les sorties, ni le bénéfice.",
+  en: "This operation only moves money between company accounts. It does not change income, expenses or profit.",
+},
+
+transferDescriptionPlaceholder: {
+  pt: "Ex.: Reserva mensal para expansão",
+  fr: "Ex. : Réserve mensuelle pour l'expansion",
+  en: "Example: Monthly expansion reserve",
+},
+
   top100Products: {
   pt: "Top 100 produtos",
   fr: "Top 100 produits",
@@ -881,7 +959,7 @@ transferStock: { pt: "Transferir stock", fr: "Transférer le stock", en: "Transf
 transferring: { pt: "Transferindo...", fr: "Transfert...", en: "Transferring..." },
 chooseDestinationCantina: { pt: "Escolha a cantina de destino.", fr: "Choisissez la cantine de destination.", en: "Choose the destination canteen." },
 addAtLeastOneTransferProduct: { pt: "Adicione pelo menos um produto à transferência.", fr: "Ajoutez au moins un produit au transfert.", en: "Add at least one product to the transfer." },
-transferError: { pt: "Erro ao transferir stock.", fr: "Erreur lors du transfert du stock.", en: "Error transferring stock." },
+
 
 loadingTransactions: { pt: "Carregando transações...", fr: "Chargement des transactions...", en: "Loading transactions..." },
 productCode: { pt: "Produto / código", fr: "Produit / code", en: "Product / code" },
@@ -1934,7 +2012,7 @@ choosePaymentMethod:{pt:"Escolher tipo de pagamento",fr:"Choisir le mode de paie
 saleTotal:{pt:"Total da venda",fr:"Total de la vente",en:"Sale total"},
 cash:{pt:"Dinheiro",fr:"Espèces",en:"Cash"},
 card:{pt:"Cartão",fr:"Carte",en:"Card"},
-transfer:{pt:"Transferência",fr:"Virement",en:"Transfer"},
+
 cashPayment:{pt:"Pagamento em dinheiro",fr:"Paiement en espèces",en:"Cash payment"},
 enterCustomerAmount:{pt:"Introduz o valor recebido do cliente.",fr:"Saisissez le montant reçu du client.",en:"Enter amount received from customer."},
 customerPays:{pt:"Cliente paga",fr:"Le client paie",en:"Customer pays"},
