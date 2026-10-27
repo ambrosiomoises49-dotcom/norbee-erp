@@ -25,7 +25,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-type FinanceType = "INCOME" | "EXPENSE";
+type FinanceTransactionType = "INCOME" | "EXPENSE";
+type FinanceFormType = FinanceTransactionType | "TRANSFER";
 
 type FinancialAccount = {
   id: string;
@@ -38,7 +39,7 @@ type FinancialAccount = {
 
 type FinanceTransaction = {
   id: string;
-  type: FinanceType;
+  type: FinanceTransactionType;
   amount: string;
   description: string | null;
   date: string;
@@ -76,17 +77,9 @@ export default function FinancasClient() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
-  const [transferModalOpen, setTransferModalOpen] =
-  useState(false);
+  
 
-const [transferForm, setTransferForm] = useState({
-  sourceAccountId: "",
-  destinationAccountId: "",
-  amount: "",
-  description: "",
-  date: new Date().toISOString().slice(0, 10),
-});
-  const [editingTransaction, setEditingTransaction] =
+ const [editingTransaction, setEditingTransaction] =
     useState<FinanceTransaction | null>(null);
   const [deletingTransaction, setDeletingTransaction] =
     useState<FinanceTransaction | null>(null);
@@ -97,12 +90,16 @@ const [transferForm, setTransferForm] = useState({
   const [message, setMessage] = useState("");
 
   const [form, setForm] = useState({
-    type: "INCOME" as FinanceType,
-    amount: "",
-    description: "",
-    date: new Date().toISOString().slice(0, 10),
-    financialAccountId: "",
-  });
+  type: "INCOME" as FinanceFormType,
+  amount: "",
+  description: "",
+  date: new Date().toISOString().slice(0, 10),
+
+  financialAccountId: "",
+
+  sourceAccountId: "",
+  destinationAccountId: "",
+});
 
   const [accountForm, setAccountForm] = useState({
     name: "",
@@ -161,9 +158,16 @@ const [transferForm, setTransferForm] = useState({
       );
 
       if (defaultAccount) {
+        const firstDestination = data.accounts?.find(
+          (account: FinancialAccount) => account.id !== defaultAccount.id
+        );
+
         setForm((prev) => ({
           ...prev,
           financialAccountId: prev.financialAccountId || defaultAccount.id,
+          sourceAccountId: prev.sourceAccountId || defaultAccount.id,
+          destinationAccountId:
+            prev.destinationAccountId || firstDestination?.id || "",
         }));
       }
     } catch {
@@ -304,16 +308,41 @@ const [transferForm, setTransferForm] = useState({
 }
 
   function resetForm() {
-    const defaultAccount = accounts.find((account) => account.isDefault);
+  const defaultAccount =
+    accounts.find(
+      (account) => account.isDefault
+    ) ||
+    accounts[0] ||
+    null;
 
-    setForm({
-      type: "INCOME",
-      amount: "",
-      description: "",
-      date: new Date().toISOString().slice(0, 10),
-      financialAccountId: defaultAccount?.id || accounts[0]?.id || "",
-    });
-  }
+  const firstDestination =
+    accounts.find(
+      (account) =>
+        account.id !== defaultAccount?.id
+    ) || null;
+
+  setForm({
+    type: "INCOME",
+
+    amount: "",
+
+    description: "",
+
+    date:
+      new Date()
+        .toISOString()
+        .slice(0, 10),
+
+    financialAccountId:
+      defaultAccount?.id || "",
+
+    sourceAccountId:
+      defaultAccount?.id || "",
+
+    destinationAccountId:
+      firstDestination?.id || "",
+  });
+}
 
   function openNewTransaction() {
     setEditingTransaction(null);
@@ -323,56 +352,159 @@ const [transferForm, setTransferForm] = useState({
 
   function openEditTransaction(tx: FinanceTransaction) {
     setEditingTransaction(tx);
+
     setForm({
       type: tx.type,
       amount: String(tx.amount || ""),
       description: tx.description || "",
       date: tx.date.slice(0, 10),
       financialAccountId: tx.financialAccount?.id || "",
+      sourceAccountId: "",
+      destinationAccountId: "",
     });
+
     setModalOpen(true);
-  }
+  } 
 
-  async function saveTransaction(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+ async function saveTransaction(
+  e: React.FormEvent<HTMLFormElement>
+) {
+  e.preventDefault();
 
-    setSaving(true);
-    setError("");
-    setMessage("");
+  setSaving(true);
+  setError("");
+  setMessage("");
 
-    try {
-      const url = editingTransaction
-        ? `/api/financas/${editingTransaction.id}`
-        : "/api/financas";
+  try {
+    if (form.type === "TRANSFER") {
+      const res = await fetch(
+        "/api/financas/transfer",
+        {
+          method: "POST",
 
-      const method = editingTransaction ? "PATCH" : "POST";
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
 
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(form),
-      });
+          body: JSON.stringify({
+            sourceAccountId:
+              form.sourceAccountId,
 
-      const data = await res.json();
+            destinationAccountId:
+              form.destinationAccountId,
+
+            amount:
+              form.amount,
+
+            description:
+              form.description,
+
+            date:
+              form.date,
+          }),
+        }
+      );
+
+      const data =
+        await res.json();
 
       if (!res.ok) {
-        setError(data.message || t("transactionSaveError"));
+        setError(
+          data.message ||
+            t("transferError")
+        );
+
         return;
       }
 
-      setMessage(data.message || t("transactionSavedSuccess"));
+      setMessage(
+        data.message ||
+          t("transferSuccess")
+      );
+
       setModalOpen(false);
-      setEditingTransaction(null);
+
       resetForm();
+
       await loadTransactions();
-    } catch {
-      setError(t("transactionSaveError"));
-    } finally {
-      setSaving(false);
+
+      return;
     }
+
+    const url =
+      editingTransaction
+        ? `/api/financas/${editingTransaction.id}`
+        : "/api/financas";
+
+    const method =
+      editingTransaction
+        ? "PATCH"
+        : "POST";
+
+    const res = await fetch(
+      url,
+      {
+        method,
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify({
+          type:
+            form.type,
+
+          amount:
+            form.amount,
+
+          description:
+            form.description,
+
+          date:
+            form.date,
+
+          financialAccountId:
+            form.financialAccountId,
+        }),
+      }
+    );
+
+    const data =
+      await res.json();
+
+    if (!res.ok) {
+      setError(
+        data.message ||
+          t("transactionSaveError")
+      );
+
+      return;
+    }
+
+    setMessage(
+      data.message ||
+        t("transactionSavedSuccess")
+    );
+
+    setModalOpen(false);
+
+    setEditingTransaction(null);
+
+    resetForm();
+
+    await loadTransactions();
+  } catch {
+    setError(
+      form.type === "TRANSFER"
+        ? t("transferError")
+        : t("transactionSaveError")
+    );
+  } finally {
+    setSaving(false);
   }
+}
 
   async function createAccount(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -399,13 +531,15 @@ const [transferForm, setTransferForm] = useState({
 
       setMessage(t("financialAccountCreatedSuccess"));
       setAccountModalOpen(false);
+
       setAccountForm({
         name: "",
         type: "CASH",
         balance: "",
-        currency: "AOA",
+        currency: currency || "AOA",
         isDefault: false,
       });
+
       await loadTransactions();
     } catch {
       setError(t("accountCreateError"));
@@ -413,152 +547,6 @@ const [transferForm, setTransferForm] = useState({
       setSaving(false);
     }
   }
-
-  function openTransferModal() {
-  const defaultAccount =
-    accounts.find(
-      (account) => account.isDefault
-    ) ||
-    accounts[0] ||
-    null;
-
-  const firstDestination =
-    accounts.find(
-      (account) =>
-        account.id !== defaultAccount?.id
-    ) || null;
-
-  setTransferForm({
-    sourceAccountId:
-      defaultAccount?.id || "",
-
-    destinationAccountId:
-      firstDestination?.id || "",
-
-    amount: "",
-
-    description: "",
-
-    date:
-      new Date()
-        .toISOString()
-        .slice(0, 10),
-  });
-
-  setError("");
-  setMessage("");
-  setTransferModalOpen(true);
-}
-
-async function saveTransfer(
-  e: React.FormEvent<HTMLFormElement>
-) {
-  e.preventDefault();
-
-  setSaving(true);
-  setError("");
-  setMessage("");
-
-  try {
-    const amountValue =
-      Number(transferForm.amount);
-
-    if (
-      !transferForm.sourceAccountId ||
-      !transferForm.destinationAccountId
-    ) {
-      setError(
-        t("chooseTransferAccounts")
-      );
-
-      return;
-    }
-
-    if (
-      transferForm.sourceAccountId ===
-      transferForm.destinationAccountId
-    ) {
-      setError(
-        t("transferAccountsMustDiffer")
-      );
-
-      return;
-    }
-
-    if (
-      !Number.isFinite(amountValue) ||
-      amountValue <= 0
-    ) {
-      setError(
-        t("invalidTransferAmount")
-      );
-
-      return;
-    }
-
-    const sourceAccount =
-      accounts.find(
-        (account) =>
-          account.id ===
-          transferForm.sourceAccountId
-      );
-
-    if (
-      sourceAccount &&
-      Number(sourceAccount.balance || 0) <
-        amountValue
-    ) {
-      setError(
-        t("insufficientAccountBalance")
-      );
-
-      return;
-    }
-
-    const res = await fetch(
-      "/api/financas/transfer",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        body: JSON.stringify(
-          transferForm
-        ),
-      }
-    );
-
-    const data =
-      await res.json();
-
-    if (!res.ok) {
-      setError(
-        data.message ||
-          t("transferError")
-      );
-
-      return;
-    }
-
-    setMessage(
-      data.message ||
-        t("transferSuccess")
-    );
-
-    setTransferModalOpen(false);
-
-    await loadTransactions();
-  } catch {
-    setError(
-      t("transferError")
-    );
-  } finally {
-    setSaving(false);
-  }
-}
 
   async function deleteTransaction() {
     if (!deletingTransaction) return;
@@ -589,7 +577,7 @@ async function saveTransfer(
     }
   }
 
-  function typeLabel(type: FinanceType) {
+  function typeLabel(type: FinanceTransactionType) {
     return type === "INCOME" ? t("income") : t("expense");
   }
 
@@ -602,14 +590,6 @@ async function saveTransfer(
     if (origin === "MANUAL") return t("manual");
     if (origin === "TRANSFER") return t("transfer");
     return origin;
-  }
-
-  function accountTypeLabel(type: FinancialAccount["type"]) {
-    if (type === "CASH") return t("cashRegister");
-    if (type === "BANK") return t("bank");
-    if (type === "MOBILE_MONEY") return t("mobileMoney");
-    if (type === "CARD") return t("card");
-    return t("other");
   }
 
   function canModify(tx: FinanceTransaction) { 
@@ -662,16 +642,7 @@ async function saveTransfer(
             <WalletCards size={16} />
             {t("newAccount")}
           </button>
-              <button
-                    type="button"
-                    onClick={openTransferModal}
-                    disabled={accounts.length < 2}
-                    className="rounded-[14px] border px-4 py-2.5 text-sm font-semibold text-[#123A5C] hover:bg-[#123A5C] hover:text-white flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <WalletCards size={16} />
-
-                    {t("transfer")}
-                  </button>
+              
           <button
             onClick={openNewTransaction}
             className="rounded-[14px] bg-[#123A5C] px-4 py-2.5 text-white text-sm font-semibold flex items-center gap-2 hover:bg-[#0B2540]"
@@ -730,35 +701,34 @@ async function saveTransfer(
         />
       </div>
 
-      {otherAccounts.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          {otherAccounts.map((account) => (
-            <div
-              key={account.id}
-              className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-100"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="font-bold text-slate-800">{account.name}</p>
-                  <p className="text-xs text-slate-500">
-                    {accountTypeLabel(account.type)}
-                  </p>
-                </div>
+     {otherAccounts.length > 0 && (
+  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+    {otherAccounts.map(
+      (account) => (
+        <div
+          key={account.id}
+          className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-100 flex items-center gap-3 min-w-0"
+        >
+          <div className="w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 bg-[#123A5C]/10 text-[#123A5C]">
+            <WalletCards size={20} />
+          </div>
 
-                {account.isDefault && (
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                    {t("main")}
-                  </span>
-                )}
-              </div>
+          <div className="min-w-0">
+            <p className="text-xs text-slate-500 truncate">
+              {account.name}
+            </p>
 
-              <p className="mt-3 text-2xl font-black text-[#123A5C]">
-                {formatMoney(account.balance)}
-              </p>
-            </div>
-          ))}
+            <p className="text-base xl:text-lg font-black text-slate-800 truncate">
+              {formatMoney(
+                account.balance
+              )}
+            </p>
+          </div>
         </div>
-      )}
+      )
+    )}
+  </div>
+)}
 
       <div className="bg-white rounded-[22px] shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-4 border-b border-slate-100 space-y-3">
@@ -984,235 +954,7 @@ async function saveTransfer(
           </>
         )}
       </div>
-      {transferModalOpen && (
-  <Modal
-    title={t("transferBetweenAccounts")}
-    onClose={() =>
-      setTransferModalOpen(false)
-    }
-    maxWidth="max-w-xl"
-  >
-    <form
-      onSubmit={saveTransfer}
-      className="space-y-4 mt-5"
-    >
-      {/* CONTA ORIGEM */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-2">
-          {t("sourceAccount")}
-        </label>
-
-        <select
-          required
-          value={
-            transferForm.sourceAccountId
-          }
-          onChange={(e) => {
-            const sourceAccountId =
-              e.target.value;
-
-            setTransferForm(
-              (prev) => ({
-                ...prev,
-
-                sourceAccountId,
-
-                destinationAccountId:
-                  prev.destinationAccountId ===
-                  sourceAccountId
-                    ? ""
-                    : prev.destinationAccountId,
-              })
-            );
-          }}
-          className="w-full border rounded-[14px] px-4 py-3 text-sm"
-        >
-          <option value="">
-            {t("chooseFinancialAccount")}
-          </option>
-
-          {accounts.map(
-            (account) => (
-              <option
-                key={account.id}
-                value={account.id}
-              >
-                {account.name} —{" "}
-                {formatMoney(
-                  account.balance
-                )}
-              </option>
-            )
-          )}
-        </select>
-      </div>
-
-      {/* CONTA DESTINO */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-2">
-          {t("destinationAccount")}
-        </label>
-
-        <select
-          required
-          value={
-            transferForm.destinationAccountId
-          }
-          onChange={(e) =>
-            setTransferForm(
-              (prev) => ({
-                ...prev,
-                destinationAccountId:
-                  e.target.value,
-              })
-            )
-          }
-          className="w-full border rounded-[14px] px-4 py-3 text-sm"
-        >
-          <option value="">
-            {t("chooseFinancialAccount")}
-          </option>
-
-          {accounts
-            .filter(
-              (account) =>
-                account.id !==
-                transferForm.sourceAccountId
-            )
-            .map(
-              (account) => (
-                <option
-                  key={account.id}
-                  value={account.id}
-                >
-                  {account.name} —{" "}
-                  {formatMoney(
-                    account.balance
-                  )}
-                </option>
-              )
-            )}
-        </select>
-      </div>
-
-      {/* VALOR */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-2">
-          {t("amount")}
-        </label>
-
-        <input
-          required
-          type="number"
-          min="0.01"
-          step="0.01"
-          value={
-            transferForm.amount
-          }
-          onChange={(e) =>
-            setTransferForm(
-              (prev) => ({
-                ...prev,
-                amount:
-                  e.target.value,
-              })
-            )
-          }
-          className="w-full border rounded-[14px] px-4 py-3 text-sm"
-          placeholder={t("amount")}
-        />
-
-        {transferForm.sourceAccountId && (
-          <p className="mt-2 text-xs text-slate-500">
-            {t("availableBalance")}:{" "}
-            {formatMoney(
-              accounts.find(
-                (account) =>
-                  account.id ===
-                  transferForm.sourceAccountId
-              )?.balance || 0
-            )}
-          </p>
-        )}
-      </div>
-
-      {/* DATA */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-2">
-          {t("date")}
-        </label>
-
-        <input
-          type="date"
-          value={
-            transferForm.date
-          }
-          onChange={(e) =>
-            setTransferForm(
-              (prev) => ({
-                ...prev,
-                date:
-                  e.target.value,
-              })
-            )
-          }
-          className="w-full border rounded-[14px] px-4 py-3 text-sm"
-        />
-      </div>
-
-      {/* DESCRIÇÃO */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-2">
-          {t("description")}
-        </label>
-
-        <textarea
-          value={
-            transferForm.description
-          }
-          onChange={(e) =>
-            setTransferForm(
-              (prev) => ({
-                ...prev,
-                description:
-                  e.target.value,
-              })
-            )
-          }
-          className="w-full border rounded-[14px] px-4 py-3 text-sm min-h-[90px]"
-          placeholder={t(
-            "transferDescriptionPlaceholder"
-          )}
-        />
-      </div>
-
-      <div className="rounded-[14px] bg-blue-50 px-4 py-3 text-xs text-blue-800">
-        {t("internalTransferInfo")}
-      </div>
-
-      <div className="flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={() =>
-            setTransferModalOpen(false)
-          }
-          className="px-5 py-3 rounded-[16px] border"
-        >
-          {t("cancel")}
-        </button>
-
-        <button
-          disabled={saving}
-          className="px-5 py-3 rounded-[16px] bg-[#123A5C] text-white font-bold disabled:opacity-50"
-        >
-          {saving
-            ? t("saving")
-            : t("confirmTransfer")}
-        </button>
-      </div>
-    </form>
-  </Modal>
-)}
+  
       
       {modalOpen && (
         <Modal
@@ -1228,80 +970,255 @@ async function saveTransfer(
           }}
           maxWidth="max-w-xl"
         >
-          <form onSubmit={saveTransaction} className="space-y-4 mt-5">
-            <select
-              value={form.financialAccountId}
-              onChange={(e) =>
-                setForm({ ...form, financialAccountId: e.target.value })
-              }
-              className="w-full border rounded-[14px] px-4 py-3 text-sm"
-              required
+          <form
+              onSubmit={saveTransaction}
+              className="space-y-4 mt-5"
             >
-              <option value="">{t("chooseFinancialAccount")}</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
+              {/* TIPO */}
+              <select
+                value={form.type}
+                onChange={(e) => {
+                  const type =
+                    e.target.value as FinanceFormType;
 
-            <select
-              value={form.type}
-              onChange={(e) =>
-                setForm({ ...form, type: e.target.value as FinanceType })
-              }
-              className="w-full border rounded-[14px] px-4 py-3 text-sm"
-            >
-              <option value="INCOME">{t("income")}</option>
-              <option value="EXPENSE">{t("expense")}</option>
-            </select>
-
-            <input
-              required
-              type="number"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              className="w-full border rounded-[14px] px-4 py-3 text-sm"
-              placeholder={t("amount")}
-            />
-
-            <input
-              type="date"
-              value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-              className="w-full border rounded-[14px] px-4 py-3 text-sm"
-            />
-
-            <textarea
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              className="w-full border rounded-[14px] px-4 py-3 text-sm min-h-[100px]"
-              placeholder={t("description")}
-            />
-
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setModalOpen(false);
-                  setEditingTransaction(null);
-                  resetForm();
+                  setForm((prev) => ({
+                    ...prev,
+                    type,
+                  }));
                 }}
-                className="px-5 py-3 rounded-[16px] border"
+                className="w-full border rounded-[14px] px-4 py-3 text-sm"
               >
-                {t("cancel")}
-              </button>
+                <option value="INCOME">
+                  {t("income")}
+                </option>
 
-              <button
-                disabled={saving}
-                className="px-5 py-3 rounded-[16px] bg-[#123A5C] text-white font-bold disabled:opacity-50"
-              >
-                {saving ? t("saving") : t("save")}
-              </button>
-            </div>
-          </form>
+                <option value="EXPENSE">
+                  {t("expense")}
+                </option>
+
+                {!editingTransaction && (
+                  <option value="TRANSFER">
+                    {t("transfer")}
+                  </option>
+                )}
+              </select>
+
+              {form.type !== "TRANSFER" ? (
+                <>
+                  {/* CONTA NORMAL */}
+                  <select
+                    value={form.financialAccountId}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        financialAccountId:
+                          e.target.value,
+                      }))
+                    }
+                    className="w-full border rounded-[14px] px-4 py-3 text-sm"
+                    required
+                  >
+                    <option value="">
+                      {t("chooseFinancialAccount")}
+                    </option>
+
+                    {accounts.map(
+                      (account) => (
+                        <option
+                          key={account.id}
+                          value={account.id}
+                        >
+                          {account.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </>
+              ) : (
+                <>
+                  {/* CONTA ORIGEM */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      {t("sourceAccount")}
+                    </label>
+
+                    <select
+                      required
+                      value={
+                        form.sourceAccountId
+                      }
+                      onChange={(e) => {
+                        const sourceAccountId =
+                          e.target.value;
+
+                        setForm(
+                          (prev) => ({
+                            ...prev,
+
+                            sourceAccountId,
+
+                            destinationAccountId:
+                              prev.destinationAccountId ===
+                              sourceAccountId
+                                ? ""
+                                : prev.destinationAccountId,
+                          })
+                        );
+                      }}
+                      className="w-full border rounded-[14px] px-4 py-3 text-sm"
+                    >
+                      <option value="">
+                        {t("chooseFinancialAccount")}
+                      </option>
+
+                      {accounts.map(
+                        (account) => (
+                          <option
+                            key={account.id}
+                            value={account.id}
+                          >
+                            {account.name} —{" "}
+                            {formatMoney(
+                              account.balance
+                            )}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+
+                  {/* CONTA DESTINO */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      {t("destinationAccount")}
+                    </label>
+
+                    <select
+                      required
+                      value={
+                        form.destinationAccountId
+                      }
+                      onChange={(e) =>
+                        setForm(
+                          (prev) => ({
+                            ...prev,
+                            destinationAccountId:
+                              e.target.value,
+                          })
+                        )
+                      }
+                      className="w-full border rounded-[14px] px-4 py-3 text-sm"
+                    >
+                      <option value="">
+                        {t("chooseFinancialAccount")}
+                      </option>
+
+                      {accounts
+                        .filter(
+                          (account) =>
+                            account.id !==
+                            form.sourceAccountId
+                        )
+                        .map(
+                          (account) => (
+                            <option
+                              key={account.id}
+                              value={account.id}
+                            >
+                              {account.name} —{" "}
+                              {formatMoney(
+                                account.balance
+                              )}
+                            </option>
+                          )
+                        )}
+                    </select>
+                  </div>
+
+                  {form.sourceAccountId && (
+                    <p className="text-xs text-slate-500">
+                      {t("availableBalance")}:{" "}
+                      {formatMoney(
+                        accounts.find(
+                          (account) =>
+                            account.id ===
+                            form.sourceAccountId
+                        )?.balance || 0
+                      )}
+                    </p>
+                  )}
+                </>
+              )}
+
+              {/* VALOR */}
+              <input
+                required
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={form.amount}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    amount:
+                      e.target.value,
+                  }))
+                }
+                className="w-full border rounded-[14px] px-4 py-3 text-sm"
+                placeholder={t("amount")}
+              />
+
+              {/* DATA */}
+              <input
+                type="date"
+                value={form.date}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    date:
+                      e.target.value,
+                  }))
+                }
+                className="w-full border rounded-[14px] px-4 py-3 text-sm"
+              />
+
+              {/* DESCRIÇÃO */}
+              <textarea
+                value={form.description}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    description:
+                      e.target.value,
+                  }))
+                }
+                className="w-full border rounded-[14px] px-4 py-3 text-sm min-h-[100px]"
+                placeholder={t("description")}
+              />
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalOpen(false);
+                    setEditingTransaction(null);
+                    resetForm();
+                  }}
+                  className="px-5 py-3 rounded-[16px] border"
+                >
+                  {t("cancel")}
+                </button>
+
+                <button
+                  disabled={saving}
+                  className="px-5 py-3 rounded-[16px] bg-[#123A5C] text-white font-bold disabled:opacity-50"
+                >
+                  {saving
+                    ? t("saving")
+                    : t("save")}
+                </button>
+              </div>
+            </form>
         </Modal>
       )}
 
