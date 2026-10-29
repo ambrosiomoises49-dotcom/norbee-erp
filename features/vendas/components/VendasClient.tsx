@@ -584,6 +584,7 @@ export default function VendasClient() {
                     size={15}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                   />
+
                   <input
                     value={barcode}
                     onChange={(e) => setBarcode(e.target.value)}
@@ -598,6 +599,7 @@ export default function VendasClient() {
                     size={15}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                   />
+
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -618,6 +620,7 @@ export default function VendasClient() {
                               <p className="text-sm font-bold text-slate-800">
                                 {stock.product.name}
                               </p>
+
                               <p className="text-xs text-slate-500">
                                 {stock.product.internalCode} · Stock:{" "}
                                 {stock.quantity}
@@ -690,10 +693,22 @@ export default function VendasClient() {
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-slate-50 text-slate-500 sticky top-0">
                     <tr>
-                      <th className="px-4 py-3 text-left">{t("product")}</th>
-                      <th className="px-4 py-3 text-right">{t("price")}</th>
-                      <th className="px-4 py-3 text-center">{t("quantity")}</th>
-                      <th className="px-4 py-3 text-right">{t("total")}</th>
+                      <th className="px-4 py-3 text-left">
+                        {t("product")}
+                      </th>
+
+                      <th className="px-4 py-3 text-right">
+                        {t("price")}
+                      </th>
+
+                      <th className="px-4 py-3 text-center">
+                        {t("quantity")}
+                      </th>
+
+                      <th className="px-4 py-3 text-right">
+                        {t("total")}
+                      </th>
+
                       <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
@@ -710,11 +725,15 @@ export default function VendasClient() {
                       </tr>
                     ) : (
                       cart.map((item) => (
-                        <tr key={item.productId} className="hover:bg-slate-50">
+                        <tr
+                          key={item.productId}
+                          className="hover:bg-slate-50"
+                        >
                           <td className="px-4 py-3">
                             <p className="font-semibold text-slate-800">
                               {item.name}
                             </p>
+
                             <p className="text-xs text-slate-500">
                               {item.code}
                             </p>
@@ -727,7 +746,9 @@ export default function VendasClient() {
                           <td className="px-4 py-3">
                             <div className="flex justify-center items-center gap-2">
                               <button
-                                onClick={() => decreaseQuantity(item.productId)}
+                                onClick={() =>
+                                  decreaseQuantity(item.productId)
+                                }
                                 className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
                               >
                                 <Minus size={14} />
@@ -738,7 +759,9 @@ export default function VendasClient() {
                               </span>
 
                               <button
-                                onClick={() => increaseQuantity(item.productId)}
+                                onClick={() =>
+                                  increaseQuantity(item.productId)
+                                }
                                 className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
                               >
                                 <Plus size={14} />
@@ -752,7 +775,9 @@ export default function VendasClient() {
 
                           <td className="px-4 py-3 text-right">
                             <button
-                              onClick={() => removeFromCart(item.productId)}
+                              onClick={() =>
+                                removeFromCart(item.productId)
+                              }
                               className="text-red-600 p-2 hover:bg-red-50 rounded-xl"
                             >
                               <Trash2 size={16} />
@@ -767,7 +792,8 @@ export default function VendasClient() {
 
               <div className="border-t bg-slate-50 px-4 py-3 flex justify-between items-center">
                 <p className="text-sm text-slate-500">
-                  {t("subtotal")}: <strong>{formatMoney(subtotal)}</strong>
+                  {t("subtotal")}:{" "}
+                  <strong>{formatMoney(subtotal)}</strong>
                 </p>
 
                 <p className="text-2xl font-black text-[#123A5C]">
@@ -779,7 +805,7 @@ export default function VendasClient() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <button
                 onClick={openPayment}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || selling}
                 className="bg-green-600 text-white rounded-[16px] px-4 py-4 font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <ArrowRight size={20} />
@@ -787,19 +813,23 @@ export default function VendasClient() {
               </button>
 
               <button
+                disabled={selling}
                 onClick={() => {
                   if (cart.length > 0) {
-                    removeFromCart(cart[cart.length - 1].productId);
+                    removeFromCart(
+                      cart[cart.length - 1].productId
+                    );
                   }
                 }}
-                className="bg-yellow-300 text-black rounded-[16px] px-4 py-4 font-bold flex items-center justify-center"
+                className="bg-yellow-300 text-black rounded-[16px] px-4 py-4 font-bold flex items-center justify-center disabled:opacity-50"
               >
                 {t("removeItem")}
               </button>
 
               <button
+                disabled={selling}
                 onClick={cancelSale}
-                className="bg-red-500 text-white rounded-[16px] px-4 py-4 font-bold flex items-center justify-center gap-2"
+                className="bg-red-500 text-white rounded-[16px] px-4 py-4 font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <XCircle size={18} />
                 {t("cancel")}
@@ -809,7 +839,10 @@ export default function VendasClient() {
 
           <aside className="min-h-0 bg-white rounded-[18px] shadow-sm border border-slate-100 overflow-hidden flex flex-col">
             <div className="bg-[#123A5C] text-white px-4 py-3">
-              <h2 className="font-bold text-base">{t("saleSummary")}</h2>
+              <h2 className="font-bold text-base">
+                {t("saleSummary")}
+              </h2>
+
               <p className="text-[11px] text-white/70">
                 {t("totalDiscountCustomer")}
               </p>
@@ -817,18 +850,25 @@ export default function VendasClient() {
 
             <div className="p-4 flex-1 grid grid-rows-[auto_auto_auto_1fr] gap-3">
               <div className="rounded-[18px] bg-green-50 border border-green-100 p-4 text-center">
-                <p className="text-xs text-green-700 font-semibold">{t("total")}</p>
+                <p className="text-xs text-green-700 font-semibold">
+                  {t("total")}
+                </p>
+
                 <p className="text-3xl font-black text-green-700">
                   {formatMoney(total)}
                 </p>
               </div>
 
               <div>
-                <label className="text-xs text-slate-500">{t("discount")}</label>
+                <label className="text-xs text-slate-500">
+                  {t("discount")}
+                </label>
+
                 <input
                   value={discount}
+                  disabled={selling}
                   onChange={(e) => setDiscount(e.target.value)}
-                  className="mt-1 h-11 w-full rounded-[14px] border px-3 text-right text-sm font-bold"
+                  className="mt-1 h-11 w-full rounded-[14px] border px-3 text-right text-sm font-bold disabled:opacity-50"
                   placeholder="0"
                 />
               </div>
@@ -837,21 +877,31 @@ export default function VendasClient() {
                 <label className="text-xs text-slate-500">
                   {t("customerName")}
                 </label>
+
                 <input
                   placeholder={t("customerName")}
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="mt-1 h-11 w-full border rounded-[14px] px-3 text-sm"
+                  disabled={selling}
+                  onChange={(e) =>
+                    setCustomerName(e.target.value)
+                  }
+                  className="mt-1 h-11 w-full border rounded-[14px] px-3 text-sm disabled:opacity-50"
                 />
               </div>
 
               <div className="rounded-[18px] bg-slate-50 border p-4">
-                <p className="text-sm text-slate-500">{t("items")}</p>
+                <p className="text-sm text-slate-500">
+                  {t("items")}
+                </p>
+
                 <p className="text-2xl font-black text-[#123A5C]">
                   {totalItems}
                 </p>
 
-                <p className="text-sm text-slate-500 mt-4">{t("subtotal")}</p>
+                <p className="text-sm text-slate-500 mt-4">
+                  {t("subtotal")}
+                </p>
+
                 <p className="text-xl font-bold text-slate-800">
                   {formatMoney(subtotal)}
                 </p>
@@ -869,14 +919,15 @@ export default function VendasClient() {
             </h2>
 
             <p className="text-slate-500 mt-1">
-              {t("saleTotal")}: <strong>{formatMoney(total)}</strong>
+              {t("saleTotal")}:{" "}
+              <strong>{formatMoney(total)}</strong>
             </p>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
               <PaymentButton
                 title={t("cash")}
-
                 icon={<Banknote size={28} />}
+                disabled={selling}
                 onClick={() => {
                   setPaymentMethod("CASH");
                   setPaymentStep("cash");
@@ -886,6 +937,7 @@ export default function VendasClient() {
               <PaymentButton
                 title={t("card")}
                 icon={<CreditCard size={28} />}
+                disabled={selling}
                 onClick={() => {
                   setPaymentMethod("CARD");
                   setPaidAmount(String(total));
@@ -896,6 +948,7 @@ export default function VendasClient() {
               <PaymentButton
                 title={t("mobileMoney")}
                 icon={<Smartphone size={28} />}
+                disabled={selling}
                 onClick={() => {
                   setPaymentMethod("MOBILE_MONEY");
                   setPaidAmount(String(total));
@@ -906,6 +959,7 @@ export default function VendasClient() {
               <PaymentButton
                 title={t("transfer")}
                 icon={<ReceiptText size={28} />}
+                disabled={selling}
                 onClick={() => {
                   setPaymentMethod("TRANSFER");
                   setPaidAmount(String(total));
@@ -916,8 +970,9 @@ export default function VendasClient() {
 
             <div className="flex justify-end mt-6">
               <button
+                disabled={selling}
                 onClick={() => setPaymentStep("none")}
-                className="px-5 py-3 rounded-[16px] border font-semibold"
+                className="px-5 py-3 rounded-[16px] border font-semibold disabled:opacity-50"
               >
                 {t("back")}
               </button>
@@ -934,13 +989,17 @@ export default function VendasClient() {
                 <h2 className="text-2xl font-bold text-slate-800">
                   {t("cashPayment")}
                 </h2>
+
                 <p className="text-slate-500 mt-1">
                   {t("enterReceivedAmount")}
                 </p>
               </div>
 
               <div className="text-right">
-                <p className="text-sm text-slate-500">{t("total")}</p>
+                <p className="text-sm text-slate-500">
+                  {t("total")}
+                </p>
+
                 <p className="text-3xl font-black text-green-700">
                   {formatMoney(total)}
                 </p>
@@ -959,19 +1018,28 @@ export default function VendasClient() {
                   <label className="text-sm text-slate-500">
                     {t("customerPays")}
                   </label>
+
                   <input
                     value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
-                    className="mt-1 h-14 w-full rounded-[16px] border px-4 text-right text-2xl font-black"
+                    disabled={selling}
+                    onChange={(e) =>
+                      setPaidAmount(e.target.value)
+                    }
+                    className="mt-1 h-14 w-full rounded-[16px] border px-4 text-right text-2xl font-black disabled:opacity-50"
                     placeholder="0"
                   />
                 </div>
 
                 <div>
-                  <label className="text-sm text-slate-500">{t("change")}</label>
+                  <label className="text-sm text-slate-500">
+                    {t("change")}
+                  </label>
+
                   <div
                     className={`mt-1 h-14 w-full rounded-[16px] border px-4 flex items-center justify-end text-2xl font-black ${
-                      change < 0 ? "text-red-600" : "text-green-700"
+                      change < 0
+                        ? "text-red-600"
+                        : "text-green-700"
                     }`}
                   >
                     {formatMoney(change)}
@@ -980,38 +1048,57 @@ export default function VendasClient() {
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setPaymentStep("method")}
-                    className="px-5 py-3 rounded-[16px] border font-semibold"
+                    disabled={selling}
+                    onClick={() =>
+                      setPaymentStep("method")
+                    }
+                    className="px-5 py-3 rounded-[16px] border font-semibold disabled:opacity-50"
                   >
                     {t("back")}
                   </button>
 
                   <button
-                    onClick={() => submitSale("CASH")}
+                    onClick={() =>
+                      submitSale("CASH")
+                    }
                     disabled={selling}
                     className="flex-1 px-5 py-3 rounded-[16px] bg-green-600 text-white font-bold disabled:opacity-50"
                   >
-                    {selling ? t("validating") : t("validatePayment")}
+                    {selling
+                      ? t("validating")
+                      : t("validatePayment")}
                   </button>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0"].map(
-                  (key) => (
-                    <button
-                      key={key}
-                      onClick={() => addNumber(key)}
-                      className="h-16 rounded-[16px] bg-slate-100 font-bold text-2xl hover:bg-slate-200"
-                    >
-                      {key}
-                    </button>
-                  )
-                )}
+                {[
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                  "7",
+                  "8",
+                  "9",
+                  ".",
+                  "0",
+                ].map((key) => (
+                  <button
+                    key={key}
+                    disabled={selling}
+                    onClick={() => addNumber(key)}
+                    className="h-16 rounded-[16px] bg-slate-100 font-bold text-2xl hover:bg-slate-200 disabled:opacity-50"
+                  >
+                    {key}
+                  </button>
+                ))}
 
                 <button
+                  disabled={selling}
                   onClick={() => setPaidAmount("")}
-                  className="h-16 rounded-[16px] bg-red-50 text-red-600 font-bold text-xl"
+                  className="h-16 rounded-[16px] bg-red-50 text-red-600 font-bold text-xl disabled:opacity-50"
                 >
                   C
                 </button>
@@ -1025,7 +1112,10 @@ export default function VendasClient() {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6">
           <div className="bg-white rounded-[24px] shadow-xl w-full max-w-xl p-6 text-center">
             <div className="mx-auto w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mb-4">
-              <CheckCircle2 className="text-green-600" size={34} />
+              <CheckCircle2
+                className="text-green-600"
+                size={34}
+              />
             </div>
 
             <h2 className="text-2xl font-bold text-slate-800">
@@ -1065,7 +1155,9 @@ export default function VendasClient() {
               </h2>
 
               <button
-                onClick={() => setReportOpen(false)}
+                onClick={() =>
+                  setReportOpen(false)
+                }
                 className="rounded-xl px-4 py-2 border"
               >
                 {t("close")}
@@ -1076,19 +1168,25 @@ export default function VendasClient() {
               <input
                 type="date"
                 value={reportStart}
-                onChange={(e) => setReportStart(e.target.value)}
+                onChange={(e) =>
+                  setReportStart(e.target.value)
+                }
                 className="border rounded-[14px] px-4 py-3 text-sm"
               />
 
               <input
                 type="date"
                 value={reportEnd}
-                onChange={(e) => setReportEnd(e.target.value)}
+                onChange={(e) =>
+                  setReportEnd(e.target.value)
+                }
                 className="border rounded-[14px] px-4 py-3 text-sm"
               />
 
               <button
-                onClick={() => loadSalesReport(1)}
+                onClick={() =>
+                  loadSalesReport(1)
+                }
                 className="rounded-[14px] bg-[#123A5C] text-white font-bold"
               >
                 {t("search")}
@@ -1099,12 +1197,29 @@ export default function VendasClient() {
               <table className="w-full min-w-[800px] text-sm">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 text-left">{t("date")}</th>
-                    <th className="px-4 py-3 text-left">{t("saleNumber")}</th>
-                    <th className="px-4 py-3 text-left">{t("payment")}</th>
-                    <th className="px-4 py-3 text-right">{t("total")}</th>
-                    <th className="px-4 py-3 text-center">{t("items")}</th>
-                     <th className="px-4 py-3 text-center">{t("details")}</th>
+                    <th className="px-4 py-3 text-left">
+                      {t("date")}
+                    </th>
+
+                    <th className="px-4 py-3 text-left">
+                      {t("saleNumber")}
+                    </th>
+
+                    <th className="px-4 py-3 text-left">
+                      {t("payment")}
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      {t("total")}
+                    </th>
+
+                    <th className="px-4 py-3 text-center">
+                      {t("items")}
+                    </th>
+
+                    <th className="px-4 py-3 text-center">
+                      {t("details")}
+                    </th>
                   </tr>
                 </thead>
 
@@ -1122,25 +1237,45 @@ export default function VendasClient() {
                     reportSales.map((sale) => (
                       <tr key={sale.id}>
                         <td className="px-4 py-3">
-                          {new Date(sale.createdAt).toLocaleString("pt-PT")}
+                          {new Date(
+                            sale.createdAt
+                          ).toLocaleString(
+                            "pt-PT"
+                          )}
                         </td>
-                        <td className="px-4 py-3">{sale.saleNumber}</td>
-                        <td className="px-4 py-3">{sale.paymentMethod}</td>
+
+                        <td className="px-4 py-3">
+                          {sale.saleNumber}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {sale.paymentMethod}
+                        </td>
+
                         <td className="px-4 py-3 text-right font-bold">
-                          {formatMoney(sale.totalAmount)}
+                          {formatMoney(
+                            sale.totalAmount
+                          )}
                         </td>
+
                         <td className="px-4 py-3 text-center">
-                          {sale.items?.length || 0}
+                          {sale.items?.length ||
+                            0}
                         </td>
+
                         <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/facturas/${sale.id}`)}
-                          className="rounded-xl bg-[#123A5C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0B2540]"
-                        >
-                          {t("view")}
-                        </button>
-                      </td>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              router.push(
+                                `/facturas/${sale.id}`
+                              )
+                            }
+                            className="rounded-xl bg-[#123A5C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0B2540]"
+                          >
+                            {t("view")}
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -1150,21 +1285,36 @@ export default function VendasClient() {
 
             <div className="flex justify-between items-center mt-4">
               <p className="text-sm text-slate-500">
-                {t("page")} {reportPage} {t("of")} {reportTotalPages}
+                {t("page")} {reportPage}{" "}
+                {t("of")}{" "}
+                {reportTotalPages}
               </p>
 
               <div className="flex gap-2">
                 <button
-                  disabled={reportPage === 1}
-                  onClick={() => loadSalesReport(reportPage - 1)}
+                  disabled={
+                    reportPage === 1
+                  }
+                  onClick={() =>
+                    loadSalesReport(
+                      reportPage - 1
+                    )
+                  }
                   className="px-4 py-2 rounded-xl border disabled:opacity-40"
                 >
                   {t("previous")}
                 </button>
 
                 <button
-                  disabled={reportPage === reportTotalPages}
-                  onClick={() => loadSalesReport(reportPage + 1)}
+                  disabled={
+                    reportPage ===
+                    reportTotalPages
+                  }
+                  onClick={() =>
+                    loadSalesReport(
+                      reportPage + 1
+                    )
+                  }
                   className="px-4 py-2 rounded-xl border disabled:opacity-40"
                 >
                   {t("next")}
@@ -1182,18 +1332,25 @@ function PaymentButton({
   title,
   icon,
   onClick,
+  disabled = false,
 }: {
   title: string;
   icon: React.ReactNode;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="rounded-[20px] border border-slate-100 bg-slate-50 p-6 text-[#123A5C] hover:border-[#123A5C] hover:bg-white transition flex flex-col items-center justify-center gap-3"
+      disabled={disabled}
+      className="rounded-[20px] border border-slate-100 bg-slate-50 p-6 text-[#123A5C] hover:border-[#123A5C] hover:bg-white transition flex flex-col items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {icon}
-      <span className="font-bold">{title}</span>
+
+      <span className="font-bold">
+        {title}
+      </span>
     </button>
   );
 }

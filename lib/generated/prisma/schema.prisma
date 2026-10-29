@@ -554,7 +554,8 @@ model Sale {
   cantinaId String
   userId    String?
 
-  saleNumber String // sequencial (formato AGT ou local)
+  saleNumber      String // sequencial (formato AGT ou local)
+  clientRequestId String? @unique
 
   subtotal     Decimal @default(0) @db.Decimal(15, 2)
   taxAmount    Decimal @default(0) @db.Decimal(15, 2)
@@ -579,6 +580,7 @@ model Sale {
   ivoices Invoice?
 
   @@unique([companyId, saleNumber])
+  @@unique([companyId, clientRequestId])
   @@index([companyId])
   @@index([cantinaId])
   @@index([createdAt])

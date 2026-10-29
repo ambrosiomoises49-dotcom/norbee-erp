@@ -8,7 +8,8 @@ type TransactionClient = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
-type FifoTx = Parameters<typeof consumeCantinaFifoForSale>[0]["tx"];
+type FifoTx =
+  Parameters<typeof consumeCantinaFifoForSale>[0]["tx"];
 
 type PaymentMethodValue =
   | "CASH"
@@ -31,6 +32,9 @@ type SaleBody = {
   customerTaxId?: string;
   notes?: string;
   discountAmount?: number | string;
+
+  // Proteção contra venda duplicada
+  clientRequestId?: string;
 };
 
 type NormalizedItem = {
@@ -75,23 +79,31 @@ function generateSaleNumber() {
     .replace(/[-:.TZ]/g, "")
     .slice(0, 14);
 
-  return `VD-${stamp}-${Math.floor(Math.random() * 9999)
+  const random = Math.floor(
+    Math.random() * 9999
+  )
     .toString()
-    .padStart(4, "0")}`;
+    .padStart(4, "0");
+
+  return `VD-${stamp}-${random}`;
 }
 
 async function ensureDefaultAccount(
   companyId: string,
   tx: TransactionClient
 ) {
-  const existing = await tx.financialAccount.findFirst({
-    where: {
-      companyId,
-      isDefault: true,
-    },
-  });
+  const existing =
+    await tx.financialAccount.findFirst({
+      where: {
+        companyId,
+        isDefault: true,
+        status: "ACTIVE",
+      },
+    });
 
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
 
   return tx.financialAccount.create({
     data: {
@@ -105,10 +117,30 @@ async function ensureDefaultAccount(
   });
 }
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
+  /*
+   * Guardamos estes dois valores fora do try
+   * para conseguirmos recuperar de uma colisão
+   * de idempotência no catch.
+   */
+  let retryCompanyId: string | null =
+    null;
+
+  let retryClientRequestId:
+    | string
+    | null = null;
+
   try {
-    const session = await requireAuth();
-    const body = (await request.json()) as SaleBody;
+    const session =
+      await requireAuth();
+
+    retryCompanyId =
+      session.companyId;
+
+    const body =
+      (await request.json()) as SaleBody;
 
     const {
       items,
@@ -118,7 +150,105 @@ export async function POST(request: Request) {
       customerTaxId,
       notes,
       discountAmount,
+      clientRequestId,
     } = body;
+
+    /*
+     * ========================================================
+     * IDEMPOTENCY KEY
+     * ========================================================
+     */
+
+    const normalizedClientRequestId =
+      String(
+        clientRequestId || ""
+      ).trim();
+
+    /*
+     * Todas as novas vendas têm de chegar
+     * com um identificador único criado pelo POS.
+     */
+    if (
+      !normalizedClientRequestId
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "O ponto de venda precisa ser atualizado antes de registar novas vendas.",
+        },
+        {
+          status: 409,
+        }
+      );
+    }
+
+    /*
+     * UUID normal tem muito menos de 100 caracteres.
+     * Isto evita entradas absurdas ou malformadas.
+     */
+    if (
+      normalizedClientRequestId.length >
+      100
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Identificador da venda inválido.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    retryClientRequestId =
+      normalizedClientRequestId;
+
+    /*
+     * ========================================================
+     * VERIFICAR SE ESTA VENDA JÁ FOI REGISTADA
+     * ========================================================
+     *
+     * Exemplo:
+     *
+     * POS envia venda
+     * servidor grava
+     * resposta HTTP perde-se
+     * POS reenvia
+     *
+     * Neste segundo pedido devolvemos a venda
+     * existente e NÃO mexemos em stock/caixa.
+     */
+
+    const existingSale =
+      await prisma.sale.findFirst({
+        where: {
+          companyId:
+            session.companyId,
+
+          clientRequestId:
+            normalizedClientRequestId,
+        },
+      });
+
+    if (existingSale) {
+      return NextResponse.json({
+        message:
+          "Venda já registada anteriormente.",
+
+        sale:
+          existingSale,
+
+        duplicate:
+          true,
+      });
+    }
+
+    /*
+     * ========================================================
+     * CANTINA
+     * ========================================================
+     */
 
     const cantinaId =
       session.role === "ADMIN"
@@ -131,30 +261,35 @@ export async function POST(request: Request) {
           message:
             "Escolha uma cantina para realizar a venda.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    /*
-     * ========================================================
-     * VALIDAR CANTINA
-     * ========================================================
-     */
+    const cantina =
+      await prisma.cantina.findFirst({
+        where: {
+          id:
+            cantinaId,
 
-    const cantina = await prisma.cantina.findFirst({
-      where: {
-        id: cantinaId,
-        companyId: session.companyId,
-        status: "ACTIVE",
-      },
-    });
+          companyId:
+            session.companyId,
+
+          status:
+            "ACTIVE",
+        },
+      });
 
     if (!cantina) {
       return NextResponse.json(
         {
-          message: "Cantina inválida ou inativa.",
+          message:
+            "Cantina inválida ou inativa.",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
@@ -171,45 +306,49 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json(
         {
-          message: "Nenhum produto na venda.",
+          message:
+            "Nenhum produto na venda.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
     /*
      * ========================================================
      * NORMALIZAR PRODUTOS
+     * ========================================================
      *
-     * Normalmente o frontend já agrupa o mesmo produto.
+     * Se o mesmo produto vier duas vezes:
      *
-     * Mas fazemos também esta proteção no servidor.
-     *
-     * Exemplo:
-     *
-     * produto A = 5
-     * produto A = 7
+     * A = 2
+     * A = 3
      *
      * passa a:
      *
-     * produto A = 12
-     * ========================================================
+     * A = 5
      */
 
-    const normalizedMap = new Map<string, number>();
+    const normalizedMap =
+      new Map<string, number>();
 
     for (const item of items) {
-      const productId = String(
-        item.productId || ""
-      ).trim();
+      const productId =
+        String(
+          item.productId || ""
+        ).trim();
 
-      const quantity = Number(
-        item.quantity || 0
-      );
+      const quantity =
+        Number(
+          item.quantity || 0
+        );
 
       if (
         !productId ||
-        !Number.isFinite(quantity) ||
+        !Number.isFinite(
+          quantity
+        ) ||
         quantity <= 0
       ) {
         return NextResponse.json(
@@ -217,20 +356,32 @@ export async function POST(request: Request) {
             message:
               "Existe um item inválido na venda.",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
       normalizedMap.set(
         productId,
-        (normalizedMap.get(productId) || 0) +
-          quantity
+
+        (
+          normalizedMap.get(
+            productId
+          ) || 0
+        ) + quantity
       );
     }
 
-    const normalizedItems: NormalizedItem[] =
-      Array.from(normalizedMap.entries()).map(
-        ([productId, quantity]) => ({
+    const normalizedItems:
+      NormalizedItem[] =
+      Array.from(
+        normalizedMap.entries()
+      ).map(
+        ([
+          productId,
+          quantity,
+        ]) => ({
           productId,
           quantity,
         })
@@ -238,571 +389,588 @@ export async function POST(request: Request) {
 
     /*
      * ========================================================
-     * TRANSAÇÃO
+     * TRANSAÇÃO ATÓMICA
      * ========================================================
      */
 
-    const result = await prisma.$transaction(
-      async (tx: TransactionClient) => {
-        let subtotal = 0;
+    const result =
+      await prisma.$transaction(
+        async (
+          tx: TransactionClient
+        ) => {
+          let subtotal = 0;
 
-        /*
-         * ====================================================
-         * CARREGAR TODOS OS STOCKS NUMA ÚNICA QUERY
-         *
-         * Antes:
-         *
-         * 20 produtos = 20 findUnique()
-         *
-         * Agora:
-         *
-         * 20 produtos = 1 findMany()
-         * ====================================================
-         */
+          /*
+           * ==================================================
+           * CARREGAR STOCK
+           * ==================================================
+           */
 
-        const productIds = normalizedItems.map(
-          (item) => item.productId
-        );
+          const productIds =
+            normalizedItems.map(
+              (item) =>
+                item.productId
+            );
 
-        const stocks =
-          await tx.cantinaStock.findMany({
-            where: {
-              cantinaId,
+          const stocks =
+            await tx.cantinaStock.findMany({
+              where: {
+                cantinaId,
 
-              productId: {
-                in: productIds,
+                productId: {
+                  in:
+                    productIds,
+                },
               },
-            },
 
-            include: {
-              product: true,
-            },
-          });
+              include: {
+                product:
+                  true,
+              },
+            });
 
-        const stockMap = new Map(
-          stocks.map((stock) => [
-            stock.productId,
-            stock,
-          ])
-        );
+          const stockMap =
+            new Map(
+              stocks.map(
+                (stock) => [
+                  stock.productId,
+                  stock,
+                ]
+              )
+            );
 
-        const preparedItems: PreparedItem[] = [];
+          const preparedItems:
+            PreparedItem[] = [];
 
-        /*
-         * ====================================================
-         * VALIDAR STOCK E PREPARAR VENDA
-         * ====================================================
-         */
+          /*
+           * ==================================================
+           * VALIDAR STOCK
+           * ==================================================
+           */
 
-        for (const item of normalizedItems) {
-          const stock =
-            stockMap.get(item.productId);
+          for (
+            const item of normalizedItems
+          ) {
+            const stock =
+              stockMap.get(
+                item.productId
+              );
+
+            if (
+              !stock ||
+              stock.quantity <
+                item.quantity
+            ) {
+              throw new Error(
+                `STOCK_INSUFFICIENT:${
+                  stock?.product
+                    .name || ""
+                }`
+              );
+            }
+
+            const unitPrice =
+              Number(
+                stock.product
+                  .salePrice || 0
+              );
+
+            const totalPrice =
+              unitPrice *
+              item.quantity;
+
+            subtotal +=
+              totalPrice;
+
+            preparedItems.push({
+              productId:
+                item.productId,
+
+              quantity:
+                item.quantity,
+
+              unitPrice,
+
+              totalPrice,
+
+              minStock:
+                stock.product
+                  .minStock,
+
+              productName:
+                stock.product
+                  .name,
+            });
+          }
+
+          /*
+           * ==================================================
+           * DESCONTO
+           * ==================================================
+           */
+
+          const discount =
+            Math.max(
+              0,
+              Number(
+                discountAmount ||
+                  0
+              )
+            );
 
           if (
-            !stock ||
-            stock.quantity < item.quantity
+            discount > subtotal
           ) {
             throw new Error(
-              `STOCK_INSUFFICIENT:${
-                stock?.product.name || ""
-              }`
+              "DISCOUNT_TOO_HIGH"
             );
           }
 
-          const unitPrice = Number(
-            stock.product.salePrice || 0
-          );
+          const totalAmount =
+            subtotal -
+            discount;
 
-          const totalPrice =
-            unitPrice * item.quantity;
+          const paid =
+            Number(
+              paidAmount ||
+                totalAmount
+            );
 
-          subtotal += totalPrice;
+          if (
+            !Number.isFinite(
+              paid
+            )
+          ) {
+            throw new Error(
+              "PAID_AMOUNT_INVALID"
+            );
+          }
 
-          preparedItems.push({
-            productId:
-              item.productId,
+          const changeAmount =
+            paid -
+            totalAmount;
 
-            quantity:
-              item.quantity,
+          if (
+            paid <
+            totalAmount
+          ) {
+            throw new Error(
+              "PAID_AMOUNT_LOW"
+            );
+          }
 
-            unitPrice,
-
-            totalPrice,
-
-            minStock:
-              stock.product.minStock,
-
-            productName:
-              stock.product.name,
-          });
-        }
-
-        /*
-         * ====================================================
-         * DESCONTO / TOTAL
-         * ====================================================
-         */
-
-        const discount = Math.max(
-          0,
-          Number(discountAmount || 0)
-        );
-
-        if (discount > subtotal) {
-          throw new Error(
-            "DISCOUNT_TOO_HIGH"
-          );
-        }
-
-        const totalAmount =
-          subtotal - discount;
-
-        const paid =
-          Number(
-            paidAmount || totalAmount
-          );
-
-        const changeAmount =
-          paid - totalAmount;
-
-        if (paid < totalAmount) {
-          throw new Error(
-            "PAID_AMOUNT_LOW"
-          );
-        }
-
-        /*
-         * ====================================================
-         * CRIAR VENDA
-         *
-         * ESTRUTURA ORIGINAL PRESERVADA
-         * ====================================================
-         */
-
-        const sale =
-          await tx.sale.create({
-            data: {
-              companyId:
-                session.companyId,
-
-              cantinaId,
-
-              userId:
-                session.userId,
-
-              saleNumber:
-                generateSaleNumber(),
-
-              subtotal,
-
-              taxAmount: 0,
-
-              totalAmount,
-
-              paidAmount:
-                paid,
-
-              changeAmount,
-
-              paymentMethod:
-                paymentMethod ||
-                "CASH",
-
-              status:
-                "COMPLETED",
-
-              customerName:
-                customerName ||
-                null,
-
-              customerTaxId:
-                customerTaxId ||
-                null,
-
-              notes:
-                notes || null,
-            },
-          });
-
-        /*
-         * Movimentos serão preparados
-         * e inseridos juntos no final.
-         */
-
-        const stockMovements: StockMovementInput[] =
-          [];
-
-        /*
-         * Guardamos apenas os produtos
-         * que realmente ficaram com stock baixo.
-         */
-
-        const lowStockProducts = new Map<
-          string,
-          string
-        >();
-
-        /*
-         * ====================================================
-         * PROCESSAMENTO FIFO
-         *
-         * Esta parte continua produto por produto porque
-         * consumeCantinaFifoForSale precisa garantir FIFO.
-         *
-         * NÃO ALTERAMOS ESSA LÓGICA.
-         * ====================================================
-         */
-
-        for (const item of preparedItems) {
           /*
-           * FIFO
+           * ==================================================
+           * CRIAR VENDA
+           * ==================================================
+           *
+           * clientRequestId possui UNIQUE no banco.
+           *
+           * Esta é a proteção definitiva contra dois requests
+           * concorrentes com a mesma venda.
            */
 
-          const fifoCost =
-            await consumeCantinaFifoForSale({
-              tx:
-                tx as unknown as FifoTx,
+          const sale =
+            await tx.sale.create({
+              data: {
+                companyId:
+                  session.companyId,
 
+                cantinaId,
+
+                userId:
+                  session.userId,
+
+                saleNumber:
+                  generateSaleNumber(),
+
+                clientRequestId:
+                  normalizedClientRequestId,
+
+                subtotal,
+
+                taxAmount:
+                  0,
+
+                totalAmount,
+
+                paidAmount:
+                  paid,
+
+                changeAmount,
+
+                paymentMethod:
+                  paymentMethod ||
+                  "CASH",
+
+                status:
+                  "COMPLETED",
+
+                customerName:
+                  customerName ||
+                  null,
+
+                customerTaxId:
+                  customerTaxId ||
+                  null,
+
+                notes:
+                  notes ||
+                  null,
+              },
+            });
+
+          const stockMovements:
+            StockMovementInput[] =
+            [];
+
+          const lowStockProducts =
+            new Map<
+              string,
+              string
+            >();
+
+          /*
+           * ==================================================
+           * FIFO + SALE ITEMS + STOCK
+           * ==================================================
+           */
+
+          for (
+            const item of preparedItems
+          ) {
+            /*
+             * Consumir FIFO.
+             */
+            const fifoCost =
+              await consumeCantinaFifoForSale(
+                {
+                  tx:
+                    tx as unknown as FifoTx,
+
+                  companyId:
+                    session.companyId,
+
+                  productId:
+                    item.productId,
+
+                  cantinaId,
+
+                  quantity:
+                    item.quantity,
+
+                  saleItemId:
+                    null,
+                }
+              );
+
+            /*
+             * Custo FIFO real.
+             */
+            const unitCost =
+              fifoCost.unitCost;
+
+            const grossProfit =
+              item.totalPrice -
+              fifoCost.totalCost;
+
+            /*
+             * Item da venda.
+             */
+            const saleItem =
+              await tx.saleItem.create({
+                data: {
+                  saleId:
+                    sale.id,
+
+                  productId:
+                    item.productId,
+
+                  quantity:
+                    item.quantity,
+
+                  unitPrice:
+                    item.unitPrice,
+
+                  unitCost,
+
+                  totalPrice:
+                    item.totalPrice,
+
+                  grossProfit,
+                },
+              });
+
+            /*
+             * Ligar consumos FIFO
+             * ao SaleItem.
+             */
+            if (
+              fifoCost
+                .consumptionIds
+                .length > 0
+            ) {
+              await tx.stockBatchConsumption.updateMany(
+                {
+                  where: {
+                    id: {
+                      in:
+                        fifoCost.consumptionIds,
+                    },
+
+                    companyId:
+                      session.companyId,
+                  },
+
+                  data: {
+                    saleItemId:
+                      saleItem.id,
+                  },
+                }
+              );
+            }
+
+            /*
+             * Diminuir stock físico
+             * da cantina.
+             */
+            const updatedStock =
+              await tx.cantinaStock.update({
+                where: {
+                  cantinaId_productId:
+                    {
+                      cantinaId,
+
+                      productId:
+                        item.productId,
+                    },
+                },
+
+                data: {
+                  quantity: {
+                    decrement:
+                      item.quantity,
+                  },
+                },
+              });
+
+            /*
+             * Movimento de stock.
+             */
+            stockMovements.push({
               companyId:
                 session.companyId,
 
               productId:
                 item.productId,
 
+              userId:
+                session.userId,
+
               cantinaId,
+
+              type:
+                "SALE_OUT",
 
               quantity:
                 item.quantity,
 
-              saleItemId:
-                null,
+              reason:
+                "Venda POS FIFO",
+
+              referenceId:
+                sale.id,
             });
 
-          /*
-           * CUSTO REAL FIFO
-           */
-
-          const unitCost =
-            fifoCost.unitCost;
-
-          const grossProfit =
-            item.totalPrice -
-            fifoCost.totalCost;
-
-          /*
-           * SaleItem
-           */
-
-          const saleItem =
-            await tx.saleItem.create({
-              data: {
-                saleId:
-                  sale.id,
-
-                productId:
-                  item.productId,
-
-                quantity:
-                  item.quantity,
-
-                unitPrice:
-                  item.unitPrice,
-
-                unitCost,
-
-                totalPrice:
-                  item.totalPrice,
-
-                grossProfit,
-              },
-            });
-
-          /*
-           * Relacionar consumos FIFO ao SaleItem
-           */
-
-          if (
-            fifoCost.consumptionIds.length >
-            0
-          ) {
-            await tx.stockBatchConsumption.updateMany({
-              where: {
-                id: {
-                  in:
-                    fifoCost.consumptionIds,
-                },
-
-                companyId:
-                  session.companyId,
-              },
-
-              data: {
-                saleItemId:
-                  saleItem.id,
-              },
-            });
-          }
-
-          /*
-           * ==================================================
-           * DIMINUIR STOCK DA CANTINA
-           * ==================================================
-           */
-
-          const updatedStock =
-            await tx.cantinaStock.update({
-              where: {
-                cantinaId_productId: {
-                  cantinaId,
-
-                  productId:
-                    item.productId,
-                },
-              },
-
-              data: {
-                quantity: {
-                  decrement:
-                    item.quantity,
-                },
-              },
-            });
-
-          /*
-           * ==================================================
-           * PREPARAR MOVIMENTO
-           *
-           * Em vez de stockMovement.create()
-           * para cada produto.
-           * ==================================================
-           */
-
-          stockMovements.push({
-            companyId:
-              session.companyId,
-
-            productId:
-              item.productId,
-
-            userId:
-              session.userId,
-
-            cantinaId,
-
-            type:
-              "SALE_OUT",
-
-            quantity:
-              item.quantity,
-
-            reason:
-              "Venda POS FIFO",
-
-            referenceId:
-              sale.id,
-          });
-
-          /*
-           * ==================================================
-           * DETECTAR STOCK BAIXO
-           *
-           * Ainda não criamos notificações.
-           * ==================================================
-           */
-
-          if (
-            updatedStock.quantity <=
-            item.minStock
-          ) {
-            lowStockProducts.set(
-              item.productId,
-              item.productName
-            );
-          }
-        }
-
-        /*
-         * ====================================================
-         * MOVIMENTOS EM LOTE
-         * ====================================================
-         */
-
-        if (
-          stockMovements.length > 0
-        ) {
-          await tx.stockMovement.createMany({
-            data:
-              stockMovements,
-          });
-        }
-
-        /*
-         * ====================================================
-         * NOTIFICAÇÕES
-         *
-         * Só procuramos os admins UMA VEZ.
-         *
-         * Antes essa query podia acontecer uma vez
-         * para cada produto com stock baixo.
-         * ====================================================
-         */
-
-        if (
-          lowStockProducts.size > 0
-        ) {
-          const admins =
-            await tx.user.findMany({
-              where: {
-                companyId:
-                  session.companyId,
-
-                role:
-                  "ADMIN",
-
-                status:
-                  "ACTIVE",
-              },
-
-              select: {
-                id: true,
-              },
-            });
-
-          const notifications: LowStockNotificationInput[] =
-            [];
-
-          for (
-            const productName of lowStockProducts.values()
-          ) {
-            for (
-              const admin of admins
+            /*
+             * Stock baixo.
+             */
+            if (
+              updatedStock.quantity <=
+              item.minStock
             ) {
-              notifications.push({
-                companyId:
-                  session.companyId,
-
-                userId:
-                  admin.id,
-
-                type:
-                  "STOCK_LOW",
-
-                title:
-                  "Stock baixo na cantina",
-
-                message:
-                  `${productName} está com stock baixo após venda.`,
-
-                link:
-                  `/cantinas/${cantinaId}`,
-              });
+              lowStockProducts.set(
+                item.productId,
+                item.productName
+              );
             }
           }
 
           /*
-           * Criar todas as notificações de uma vez.
+           * ==================================================
+           * MOVIMENTOS DE STOCK EM LOTE
+           * ==================================================
            */
 
           if (
-            notifications.length > 0
+            stockMovements.length >
+            0
           ) {
-            await tx.notification.createMany({
-              data:
-                notifications,
-            });
+            await tx.stockMovement.createMany(
+              {
+                data:
+                  stockMovements,
+              }
+            );
           }
-        }
 
-        /*
-         * ====================================================
-         * FINANCEIRO
-         *
-         * LÓGICA ORIGINAL PRESERVADA.
-         * ====================================================
-         */
+          /*
+           * ==================================================
+           * NOTIFICAÇÕES DE STOCK BAIXO
+           * ==================================================
+           */
 
-        const defaultAccount =
-          await ensureDefaultAccount(
-            session.companyId,
-            tx
+          if (
+            lowStockProducts.size >
+            0
+          ) {
+            const admins =
+              await tx.user.findMany({
+                where: {
+                  companyId:
+                    session.companyId,
+
+                  role:
+                    "ADMIN",
+
+                  status:
+                    "ACTIVE",
+                },
+
+                select: {
+                  id: true,
+                },
+              });
+
+            const notifications:
+              LowStockNotificationInput[] =
+              [];
+
+            for (
+              const productName of lowStockProducts.values()
+            ) {
+              for (
+                const admin of admins
+              ) {
+                notifications.push({
+                  companyId:
+                    session.companyId,
+
+                  userId:
+                    admin.id,
+
+                  type:
+                    "STOCK_LOW",
+
+                  title:
+                    "Stock baixo na cantina",
+
+                  message:
+                    `${productName} está com stock baixo após venda.`,
+
+                  link:
+                    `/cantinas/${cantinaId}`,
+                });
+              }
+            }
+
+            if (
+              notifications.length >
+              0
+            ) {
+              await tx.notification.createMany(
+                {
+                  data:
+                    notifications,
+                }
+              );
+            }
+          }
+
+          /*
+           * ==================================================
+           * FINANCEIRO
+           * ==================================================
+           */
+
+          const defaultAccount =
+            await ensureDefaultAccount(
+              session.companyId,
+              tx
+            );
+
+          /*
+           * Criar entrada financeira
+           * exatamente UMA vez.
+           */
+          await tx.financeTransaction.create(
+            {
+              data: {
+                companyId:
+                  session.companyId,
+
+                userId:
+                  session.userId,
+
+                financialAccountId:
+                  defaultAccount.id,
+
+                type:
+                  "INCOME",
+
+                amount:
+                  totalAmount,
+
+                description:
+                  `Venda ${sale.saleNumber}`,
+
+                date:
+                  new Date(),
+
+                referenceType:
+                  "SALE",
+
+                referenceId:
+                  sale.id,
+              },
+            }
           );
 
-        await tx.financeTransaction.create({
-          data: {
-            companyId:
-              session.companyId,
+          /*
+           * Incrementar caixa
+           * exatamente UMA vez.
+           */
+          await tx.financialAccount.update(
+            {
+              where: {
+                id:
+                  defaultAccount.id,
+              },
 
-            userId:
-              session.userId,
+              data: {
+                balance: {
+                  increment:
+                    totalAmount,
+                },
+              },
+            }
+          );
 
-            financialAccountId:
-              defaultAccount.id,
+          return sale;
+        },
 
-            type:
-              "INCOME",
+        {
+          maxWait:
+            5_000,
 
-            amount:
-              totalAmount,
-
-            description:
-              `Venda ${sale.saleNumber}`,
-
-            date:
-              new Date(),
-
-            referenceType:
-              "SALE",
-
-            referenceId:
-              sale.id,
-          },
-        });
-
-        /*
-         * Atualizar saldo.
-         */
-
-        await tx.financialAccount.update({
-          where: {
-            id:
-              defaultAccount.id,
-          },
-
-          data: {
-            balance: {
-              increment:
-                totalAmount,
-            },
-          },
-        });
-
-        return sale;
-      },
-
-      /*
-       * ======================================================
-       * TIMEOUT DE SEGURANÇA
-       *
-       * Isto NÃO significa que a venda deve demorar 15 s.
-       *
-       * A otimização acima é que deve torná-la rápida.
-       *
-       * Este limite existe apenas para não matar uma venda
-       * grande aos 5 segundos por alguns milissegundos.
-       * ======================================================
-       */
-
-      {
-        maxWait: 5_000,
-        timeout: 15_000,
-      }
-    );
+          timeout:
+            15_000,
+        }
+      );
 
     /*
      * ========================================================
-     * RESPOSTA
-     *
-     * MESMO FORMATO ORIGINAL.
+     * SUCESSO
      * ========================================================
      */
 
@@ -812,25 +980,90 @@ export async function POST(request: Request) {
 
       sale:
         result,
+
+      duplicate:
+        false,
     });
   } catch (error) {
+    /*
+     * ========================================================
+     * RECUPERAÇÃO DE IDEMPOTÊNCIA
+     * ========================================================
+     *
+     * Cenário:
+     *
+     * request A chega
+     * request B chega quase simultaneamente
+     *
+     * A cria clientRequestId
+     * B tenta criar o mesmo clientRequestId
+     *
+     * UNIQUE no PostgreSQL rejeita B.
+     *
+     * Aqui procuramos a venda criada por A
+     * e devolvemos como sucesso.
+     */
+
+    if (
+      retryCompanyId &&
+      retryClientRequestId
+    ) {
+      try {
+        const existingSaleAfterError =
+          await prisma.sale.findFirst({
+            where: {
+              companyId:
+                retryCompanyId,
+
+              clientRequestId:
+                retryClientRequestId,
+            },
+          });
+
+        if (
+          existingSaleAfterError
+        ) {
+          return NextResponse.json({
+            message:
+              "Venda já registada anteriormente.",
+
+            sale:
+              existingSaleAfterError,
+
+            duplicate:
+              true,
+          });
+        }
+      } catch (
+        recoveryError
+      ) {
+        console.error(
+          "ERRO AO RECUPERAR VENDA IDEMPOTENTE:",
+          recoveryError
+        );
+      }
+    }
+
     console.error(
       "ERRO AO REGISTAR VENDA:",
       error
     );
 
-    if (error instanceof Error) {
+    if (
+      error instanceof Error
+    ) {
       /*
        * Stock normal insuficiente.
        */
-
       if (
         error.message.startsWith(
           "STOCK_INSUFFICIENT"
         )
       ) {
         const productName =
-          error.message.split(":")[1];
+          error.message.split(
+            ":"
+          )[1];
 
         return NextResponse.json(
           {
@@ -849,7 +1082,6 @@ export async function POST(request: Request) {
       /*
        * FIFO insuficiente.
        */
-
       if (
         error.message ===
         "FIFO_STOCK_INSUFFICIENT"
@@ -866,9 +1098,26 @@ export async function POST(request: Request) {
       }
 
       /*
+       * Valor recebido inválido.
+       */
+      if (
+        error.message ===
+        "PAID_AMOUNT_INVALID"
+      ) {
+        return NextResponse.json(
+          {
+            message:
+              "O valor pago é inválido.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /*
        * Pagamento insuficiente.
        */
-
       if (
         error.message ===
         "PAID_AMOUNT_LOW"
@@ -885,9 +1134,8 @@ export async function POST(request: Request) {
       }
 
       /*
-       * Desconto inválido.
+       * Desconto superior ao subtotal.
        */
-
       if (
         error.message ===
         "DISCOUNT_TOO_HIGH"
@@ -906,7 +1154,6 @@ export async function POST(request: Request) {
       /*
        * Item inválido.
        */
-
       if (
         error.message ===
         "ITEM_INVALID"
@@ -923,13 +1170,8 @@ export async function POST(request: Request) {
       }
 
       /*
-       * ======================================================
-       * TIMEOUT
-       *
-       * Não mostramos detalhes técnicos Prisma ao cliente.
-       * ======================================================
+       * Timeout.
        */
-
       const lowerMessage =
         error.message.toLowerCase();
 
@@ -947,7 +1189,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             message:
-              "A venda contém muitos produtos e demorou mais do que o esperado. Nenhuma alteração foi aplicada. Tente novamente.",
+              "A venda demorou mais do que o esperado. Verifique o histórico antes de tentar novamente.",
           },
           {
             status: 503,

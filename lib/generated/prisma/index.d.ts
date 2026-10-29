@@ -21743,6 +21743,7 @@ export namespace Prisma {
     cantinaId: string | null
     userId: string | null
     saleNumber: string | null
+    clientRequestId: string | null
     subtotal: Decimal | null
     taxAmount: Decimal | null
     totalAmount: Decimal | null
@@ -21762,6 +21763,7 @@ export namespace Prisma {
     cantinaId: string | null
     userId: string | null
     saleNumber: string | null
+    clientRequestId: string | null
     subtotal: Decimal | null
     taxAmount: Decimal | null
     totalAmount: Decimal | null
@@ -21781,6 +21783,7 @@ export namespace Prisma {
     cantinaId: number
     userId: number
     saleNumber: number
+    clientRequestId: number
     subtotal: number
     taxAmount: number
     totalAmount: number
@@ -21818,6 +21821,7 @@ export namespace Prisma {
     cantinaId?: true
     userId?: true
     saleNumber?: true
+    clientRequestId?: true
     subtotal?: true
     taxAmount?: true
     totalAmount?: true
@@ -21837,6 +21841,7 @@ export namespace Prisma {
     cantinaId?: true
     userId?: true
     saleNumber?: true
+    clientRequestId?: true
     subtotal?: true
     taxAmount?: true
     totalAmount?: true
@@ -21856,6 +21861,7 @@ export namespace Prisma {
     cantinaId?: true
     userId?: true
     saleNumber?: true
+    clientRequestId?: true
     subtotal?: true
     taxAmount?: true
     totalAmount?: true
@@ -21962,6 +21968,7 @@ export namespace Prisma {
     cantinaId: string
     userId: string | null
     saleNumber: string
+    clientRequestId: string | null
     subtotal: Decimal
     taxAmount: Decimal
     totalAmount: Decimal
@@ -22000,6 +22007,7 @@ export namespace Prisma {
     cantinaId?: boolean
     userId?: boolean
     saleNumber?: boolean
+    clientRequestId?: boolean
     subtotal?: boolean
     taxAmount?: boolean
     totalAmount?: boolean
@@ -22025,6 +22033,7 @@ export namespace Prisma {
     cantinaId?: boolean
     userId?: boolean
     saleNumber?: boolean
+    clientRequestId?: boolean
     subtotal?: boolean
     taxAmount?: boolean
     totalAmount?: boolean
@@ -22047,6 +22056,7 @@ export namespace Prisma {
     cantinaId?: boolean
     userId?: boolean
     saleNumber?: boolean
+    clientRequestId?: boolean
     subtotal?: boolean
     taxAmount?: boolean
     totalAmount?: boolean
@@ -22069,6 +22079,7 @@ export namespace Prisma {
     cantinaId?: boolean
     userId?: boolean
     saleNumber?: boolean
+    clientRequestId?: boolean
     subtotal?: boolean
     taxAmount?: boolean
     totalAmount?: boolean
@@ -22082,7 +22093,7 @@ export namespace Prisma {
     createdAt?: boolean
   }
 
-  export type SaleOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "companyId" | "cantinaId" | "userId" | "saleNumber" | "subtotal" | "taxAmount" | "totalAmount" | "paidAmount" | "changeAmount" | "paymentMethod" | "status" | "customerName" | "customerTaxId" | "notes" | "createdAt", ExtArgs["result"]["sale"]>
+  export type SaleOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "companyId" | "cantinaId" | "userId" | "saleNumber" | "clientRequestId" | "subtotal" | "taxAmount" | "totalAmount" | "paidAmount" | "changeAmount" | "paymentMethod" | "status" | "customerName" | "customerTaxId" | "notes" | "createdAt", ExtArgs["result"]["sale"]>
   export type SaleInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     company?: boolean | CompanyDefaultArgs<ExtArgs>
     cantina?: boolean | CantinaDefaultArgs<ExtArgs>
@@ -22117,6 +22128,7 @@ export namespace Prisma {
       cantinaId: string
       userId: string | null
       saleNumber: string
+      clientRequestId: string | null
       subtotal: Prisma.Decimal
       taxAmount: Prisma.Decimal
       totalAmount: Prisma.Decimal
@@ -22561,6 +22573,7 @@ export namespace Prisma {
     readonly cantinaId: FieldRef<"Sale", 'String'>
     readonly userId: FieldRef<"Sale", 'String'>
     readonly saleNumber: FieldRef<"Sale", 'String'>
+    readonly clientRequestId: FieldRef<"Sale", 'String'>
     readonly subtotal: FieldRef<"Sale", 'Decimal'>
     readonly taxAmount: FieldRef<"Sale", 'Decimal'>
     readonly totalAmount: FieldRef<"Sale", 'Decimal'>
@@ -36652,6 +36665,7 @@ export namespace Prisma {
     cantinaId: 'cantinaId',
     userId: 'userId',
     saleNumber: 'saleNumber',
+    clientRequestId: 'clientRequestId',
     subtotal: 'subtotal',
     taxAmount: 'taxAmount',
     totalAmount: 'totalAmount',
@@ -38513,6 +38527,7 @@ export namespace Prisma {
     cantinaId?: StringFilter<"Sale"> | string
     userId?: StringNullableFilter<"Sale"> | string | null
     saleNumber?: StringFilter<"Sale"> | string
+    clientRequestId?: StringNullableFilter<"Sale"> | string | null
     subtotal?: DecimalFilter<"Sale"> | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFilter<"Sale"> | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFilter<"Sale"> | Decimal | DecimalJsLike | number | string
@@ -38537,6 +38552,7 @@ export namespace Prisma {
     cantinaId?: SortOrder
     userId?: SortOrderInput | SortOrder
     saleNumber?: SortOrder
+    clientRequestId?: SortOrderInput | SortOrder
     subtotal?: SortOrder
     taxAmount?: SortOrder
     totalAmount?: SortOrder
@@ -38557,7 +38573,9 @@ export namespace Prisma {
 
   export type SaleWhereUniqueInput = Prisma.AtLeast<{
     id?: string
+    clientRequestId?: string
     companyId_saleNumber?: SaleCompanyIdSaleNumberCompoundUniqueInput
+    companyId_clientRequestId?: SaleCompanyIdClientRequestIdCompoundUniqueInput
     AND?: SaleWhereInput | SaleWhereInput[]
     OR?: SaleWhereInput[]
     NOT?: SaleWhereInput | SaleWhereInput[]
@@ -38581,7 +38599,7 @@ export namespace Prisma {
     user?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
     items?: SaleItemListRelationFilter
     ivoices?: XOR<InvoiceNullableScalarRelationFilter, InvoiceWhereInput> | null
-  }, "id" | "companyId_saleNumber">
+  }, "id" | "clientRequestId" | "companyId_saleNumber" | "companyId_clientRequestId">
 
   export type SaleOrderByWithAggregationInput = {
     id?: SortOrder
@@ -38589,6 +38607,7 @@ export namespace Prisma {
     cantinaId?: SortOrder
     userId?: SortOrderInput | SortOrder
     saleNumber?: SortOrder
+    clientRequestId?: SortOrderInput | SortOrder
     subtotal?: SortOrder
     taxAmount?: SortOrder
     totalAmount?: SortOrder
@@ -38616,6 +38635,7 @@ export namespace Prisma {
     cantinaId?: StringWithAggregatesFilter<"Sale"> | string
     userId?: StringNullableWithAggregatesFilter<"Sale"> | string | null
     saleNumber?: StringWithAggregatesFilter<"Sale"> | string
+    clientRequestId?: StringNullableWithAggregatesFilter<"Sale"> | string | null
     subtotal?: DecimalWithAggregatesFilter<"Sale"> | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalWithAggregatesFilter<"Sale"> | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalWithAggregatesFilter<"Sale"> | Decimal | DecimalJsLike | number | string
@@ -41057,6 +41077,7 @@ export namespace Prisma {
   export type SaleCreateInput = {
     id?: string
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -41081,6 +41102,7 @@ export namespace Prisma {
     cantinaId: string
     userId?: string | null
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -41099,6 +41121,7 @@ export namespace Prisma {
   export type SaleUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -41123,6 +41146,7 @@ export namespace Prisma {
     cantinaId?: StringFieldUpdateOperationsInput | string
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -41144,6 +41168,7 @@ export namespace Prisma {
     cantinaId: string
     userId?: string | null
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -41160,6 +41185,7 @@ export namespace Prisma {
   export type SaleUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -41179,6 +41205,7 @@ export namespace Prisma {
     cantinaId?: StringFieldUpdateOperationsInput | string
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -43617,12 +43644,18 @@ export namespace Prisma {
     saleNumber: string
   }
 
+  export type SaleCompanyIdClientRequestIdCompoundUniqueInput = {
+    companyId: string
+    clientRequestId: string
+  }
+
   export type SaleCountOrderByAggregateInput = {
     id?: SortOrder
     companyId?: SortOrder
     cantinaId?: SortOrder
     userId?: SortOrder
     saleNumber?: SortOrder
+    clientRequestId?: SortOrder
     subtotal?: SortOrder
     taxAmount?: SortOrder
     totalAmount?: SortOrder
@@ -43650,6 +43683,7 @@ export namespace Prisma {
     cantinaId?: SortOrder
     userId?: SortOrder
     saleNumber?: SortOrder
+    clientRequestId?: SortOrder
     subtotal?: SortOrder
     taxAmount?: SortOrder
     totalAmount?: SortOrder
@@ -43669,6 +43703,7 @@ export namespace Prisma {
     cantinaId?: SortOrder
     userId?: SortOrder
     saleNumber?: SortOrder
+    clientRequestId?: SortOrder
     subtotal?: SortOrder
     taxAmount?: SortOrder
     totalAmount?: SortOrder
@@ -48571,6 +48606,7 @@ export namespace Prisma {
   export type SaleCreateWithoutCompanyInput = {
     id?: string
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -48593,6 +48629,7 @@ export namespace Prisma {
     cantinaId: string
     userId?: string | null
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -49382,6 +49419,7 @@ export namespace Prisma {
     cantinaId?: StringFilter<"Sale"> | string
     userId?: StringNullableFilter<"Sale"> | string | null
     saleNumber?: StringFilter<"Sale"> | string
+    clientRequestId?: StringNullableFilter<"Sale"> | string | null
     subtotal?: DecimalFilter<"Sale"> | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFilter<"Sale"> | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFilter<"Sale"> | Decimal | DecimalJsLike | number | string
@@ -49867,6 +49905,7 @@ export namespace Prisma {
   export type SaleCreateWithoutUserInput = {
     id?: string
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -49889,6 +49928,7 @@ export namespace Prisma {
     companyId: string
     cantinaId: string
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -50423,6 +50463,7 @@ export namespace Prisma {
   export type SaleCreateWithoutCantinaInput = {
     id?: string
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -50445,6 +50486,7 @@ export namespace Prisma {
     companyId: string
     userId?: string | null
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -54915,6 +54957,7 @@ export namespace Prisma {
   export type SaleCreateWithoutItemsInput = {
     id?: string
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -54938,6 +54981,7 @@ export namespace Prisma {
     cantinaId: string
     userId?: string | null
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -55024,6 +55068,7 @@ export namespace Prisma {
   export type SaleUpdateWithoutItemsInput = {
     id?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -55047,6 +55092,7 @@ export namespace Prisma {
     cantinaId?: StringFieldUpdateOperationsInput | string
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -57990,6 +58036,7 @@ export namespace Prisma {
   export type SaleCreateWithoutIvoicesInput = {
     id?: string
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -58013,6 +58060,7 @@ export namespace Prisma {
     cantinaId: string
     userId?: string | null
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -58133,6 +58181,7 @@ export namespace Prisma {
   export type SaleUpdateWithoutIvoicesInput = {
     id?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -58156,6 +58205,7 @@ export namespace Prisma {
     cantinaId?: StringFieldUpdateOperationsInput | string
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -58304,6 +58354,7 @@ export namespace Prisma {
     cantinaId: string
     userId?: string | null
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -58900,6 +58951,7 @@ export namespace Prisma {
   export type SaleUpdateWithoutCompanyInput = {
     id?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -58922,6 +58974,7 @@ export namespace Prisma {
     cantinaId?: StringFieldUpdateOperationsInput | string
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -58942,6 +58995,7 @@ export namespace Prisma {
     cantinaId?: StringFieldUpdateOperationsInput | string
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -59391,6 +59445,7 @@ export namespace Prisma {
     companyId: string
     cantinaId: string
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -59455,6 +59510,7 @@ export namespace Prisma {
   export type SaleUpdateWithoutUserInput = {
     id?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -59477,6 +59533,7 @@ export namespace Prisma {
     companyId?: StringFieldUpdateOperationsInput | string
     cantinaId?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -59497,6 +59554,7 @@ export namespace Prisma {
     companyId?: StringFieldUpdateOperationsInput | string
     cantinaId?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -59669,6 +59727,7 @@ export namespace Prisma {
     companyId: string
     userId?: string | null
     saleNumber: string
+    clientRequestId?: string | null
     subtotal?: Decimal | DecimalJsLike | number | string
     taxAmount?: Decimal | DecimalJsLike | number | string
     totalAmount: Decimal | DecimalJsLike | number | string
@@ -59787,6 +59846,7 @@ export namespace Prisma {
   export type SaleUpdateWithoutCantinaInput = {
     id?: StringFieldUpdateOperationsInput | string
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -59809,6 +59869,7 @@ export namespace Prisma {
     companyId?: StringFieldUpdateOperationsInput | string
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -59829,6 +59890,7 @@ export namespace Prisma {
     companyId?: StringFieldUpdateOperationsInput | string
     userId?: NullableStringFieldUpdateOperationsInput | string | null
     saleNumber?: StringFieldUpdateOperationsInput | string
+    clientRequestId?: NullableStringFieldUpdateOperationsInput | string | null
     subtotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     taxAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
