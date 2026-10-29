@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 
 import { useRouter } from "next/navigation";
@@ -64,453 +65,1129 @@ type SaleReport = {
   items?: unknown[];
 };
 
-type PaymentMethod = "CASH" | "CARD" | "MOBILE_MONEY" | "TRANSFER" | "OTHER";
+type PaymentMethod =
+  | "CASH"
+  | "CARD"
+  | "MOBILE_MONEY"
+  | "TRANSFER"
+  | "OTHER";
+
 type Role = "ADMIN" | "EMPLOYEE";
-type PaymentStep = "none" | "method" | "cash" | "invoice";
+
+type PaymentStep =
+  | "none"
+  | "method"
+  | "cash"
+  | "invoice";
 
 export default function VendasClient() {
   const router = useRouter();
   const { t, lang } = useI18n();
 
-  const [role, setRole] = useState<Role>("EMPLOYEE");
-  const [products, setProducts] = useState<ProductStock[]>([]);
-  const [cantinas, setCantinas] = useState<Cantina[]>([]);
-  const [cantina, setCantina] = useState<Cantina | null>(null);
-  const [selectedCantinaId, setSelectedCantinaId] = useState("");
+  const [role, setRole] =
+    useState<Role>("EMPLOYEE");
 
-  const [loading, setLoading] = useState(true);
-  const [currency, setCurrency] = useState("EUR");
-  const [selling, setSelling] = useState(false);
+  const [products, setProducts] =
+    useState<ProductStock[]>([]);
 
-  const [search, setSearch] = useState("");
-  const [barcode, setBarcode] = useState("");
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cantinas, setCantinas] =
+    useState<Cantina[]>([]);
 
-  const [paymentStep, setPaymentStep] = useState<PaymentStep>("none");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
-  const [paidAmount, setPaidAmount] = useState("");
-  const [discount, setDiscount] = useState("");
-  const [customerName, setCustomerName] = useState("");
+  const [cantina, setCantina] =
+    useState<Cantina | null>(null);
 
-  const [lastSaleId, setLastSaleId] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [
+    selectedCantinaId,
+    setSelectedCantinaId,
+  ] = useState("");
 
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportStart, setReportStart] = useState("");
-  const [reportEnd, setReportEnd] = useState("");
-  const [reportPage, setReportPage] = useState(1);
-  const [reportTotalPages, setReportTotalPages] = useState(1);
-  const [reportSales, setReportSales] = useState<SaleReport[]>([]);
+  const [loading, setLoading] =
+    useState(true);
+
+  const [currency, setCurrency] =
+    useState("EUR");
+
+  const [selling, setSelling] =
+    useState(false);
+
+  const saleSubmissionLock =
+    useRef(false);
+
+  const offlineSyncLock =
+    useRef(false);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [barcode, setBarcode] =
+    useState("");
+
+  const [cart, setCart] =
+    useState<CartItem[]>([]);
+
+  const [
+    paymentStep,
+    setPaymentStep,
+  ] = useState<PaymentStep>("none");
+
+  const [
+    paymentMethod,
+    setPaymentMethod,
+  ] = useState<PaymentMethod>("CASH");
+
+  const [
+    paidAmount,
+    setPaidAmount,
+  ] = useState("");
+
+  const [discount, setDiscount] =
+    useState("");
+
+  const [
+    customerName,
+    setCustomerName,
+  ] = useState("");
+
+  const [
+    lastSaleId,
+    setLastSaleId,
+  ] = useState<string | null>(null);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const [
+    reportOpen,
+    setReportOpen,
+  ] = useState(false);
+
+  const [
+    reportStart,
+    setReportStart,
+  ] = useState("");
+
+  const [
+    reportEnd,
+    setReportEnd,
+  ] = useState("");
+
+  const [
+    reportPage,
+    setReportPage,
+  ] = useState(1);
+
+  const [
+    reportTotalPages,
+    setReportTotalPages,
+  ] = useState(1);
+
+  const [
+    reportSales,
+    setReportSales,
+  ] = useState<SaleReport[]>([]);
 
   async function loadCompanyCurrency() {
-  try {
-    const res = await fetch("/api/company/currency", {
-      cache: "no-store",
-    });
+    try {
+      const res = await fetch(
+        "/api/company/currency",
+        {
+          cache: "no-store",
+        }
+      );
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (res.ok && data.currency) {
-      setCurrency(data.currency);
+      if (
+        res.ok &&
+        data.currency
+      ) {
+        setCurrency(
+          data.currency
+        );
+      }
+    } catch {
+      // mantém moeda padrão
     }
-  } catch {
-    // mantém moeda padrão
   }
-}
 
-  async function loadProducts(cantinaId?: string) {
+  async function loadProducts(
+    cantinaId?: string
+  ) {
     setLoading(true);
     setError("");
 
-    const params = new URLSearchParams();
-    if (cantinaId) params.set("cantinaId", cantinaId);
+    const params =
+      new URLSearchParams();
+
+    if (cantinaId) {
+      params.set(
+        "cantinaId",
+        cantinaId
+      );
+    }
 
     try {
-      const res = await fetch(`/api/vendas/products?${params.toString()}`);
-      const data = await res.json();
+      const res = await fetch(
+        `/api/vendas/products?${params.toString()}`
+      );
+
+      const data =
+        await res.json();
 
       if (!res.ok) {
-        setError(data.message || t("errorLoadingProducts"));
+        setError(
+          data.message ||
+            t(
+              "errorLoadingProducts"
+            )
+        );
         return;
       }
 
-      setRole(data.role || "EMPLOYEE");
-      setCantinas(data.cantinas || []);
-      setProducts(data.products || []);
-      setCantina(data.cantina || null);
+      setRole(
+        data.role ||
+          "EMPLOYEE"
+      );
 
-      if (data.cantina?.id) {
-        setSelectedCantinaId(data.cantina.id);
+      setCantinas(
+        data.cantinas ||
+          []
+      );
+
+      setProducts(
+        data.products ||
+          []
+      );
+
+      setCantina(
+        data.cantina ||
+          null
+      );
+
+      if (
+        data.cantina?.id
+      ) {
+        setSelectedCantinaId(
+          data.cantina.id
+        );
       }
     } catch {
-      setError(t("errorLoadingProducts"));
+      setError(
+        t(
+          "errorLoadingProducts"
+        )
+      );
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-  const timeout = setTimeout(() => {
-    void loadProducts();
-    void loadCompanyCurrency();
-  }, 0);
+    const timeout =
+      setTimeout(() => {
+        void loadProducts();
 
-  return () => clearTimeout(timeout);
-}, []);
+        void loadCompanyCurrency();
+      }, 0);
 
-  const filteredProducts = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return [];
-
-    return products.filter((item) => {
-      const product = item.product;
-
-      return (
-        product.name.toLowerCase().includes(q) ||
-        product.internalCode.toLowerCase().includes(q) ||
-        (product.barcode || "").toLowerCase().includes(q)
+    return () =>
+      clearTimeout(
+        timeout
       );
-    });
-  }, [products, search]);
+  }, []);
 
-  const subtotal = cart.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  const filteredProducts =
+    useMemo(() => {
+      const q =
+        search
+          .toLowerCase()
+          .trim();
 
-  const discountValue = Number(discount || 0);
-  const total = Math.max(0, subtotal - discountValue);
-  const paid = paymentMethod === "CASH" ? Number(paidAmount || 0) : total;
-  const change = paid - total;
-  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+      if (!q) {
+        return [];
+      }
 
-  function formatMoney(value: number | string) {
-  const amount = Number(value || 0);
+      return products.filter(
+        (item) => {
+          const product =
+            item.product;
 
-  const locale =
-    lang === "fr" ? "fr-FR" : lang === "en" ? "en-GB" : "pt-PT";
+          return (
+            product.name
+              .toLowerCase()
+              .includes(q) ||
+            product.internalCode
+              .toLowerCase()
+              .includes(q) ||
+            (
+              product.barcode ||
+              ""
+            )
+              .toLowerCase()
+              .includes(q)
+          );
+        }
+      );
+    }, [
+      products,
+      search,
+    ]);
 
-  if (currency === "AOA") {
-    return `${new Intl.NumberFormat(locale, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(Number.isFinite(amount) ? amount : 0)} Kz`;
+  const subtotal =
+    cart.reduce(
+      (
+        sum,
+        item
+      ) =>
+        sum +
+        item.price *
+          item.quantity,
+      0
+    );
+
+  const discountValue =
+    Number(
+      discount || 0
+    );
+
+  const total =
+    Math.max(
+      0,
+      subtotal -
+        discountValue
+    );
+
+  const paid =
+    paymentMethod ===
+    "CASH"
+      ? Number(
+          paidAmount || 0
+        )
+      : total;
+
+  const change =
+    paid - total;
+
+  const totalItems =
+    cart.reduce(
+      (
+        sum,
+        item
+      ) =>
+        sum +
+        item.quantity,
+      0
+    );
+
+  function formatMoney(
+    value:
+      | number
+      | string
+  ) {
+    const amount =
+      Number(
+        value || 0
+      );
+
+    const locale =
+      lang === "fr"
+        ? "fr-FR"
+        : lang === "en"
+        ? "en-GB"
+        : "pt-PT";
+
+    if (
+      currency === "AOA"
+    ) {
+      return `${new Intl.NumberFormat(
+        locale,
+        {
+          minimumFractionDigits:
+            2,
+          maximumFractionDigits:
+            2,
+        }
+      ).format(
+        Number.isFinite(
+          amount
+        )
+          ? amount
+          : 0
+      )} Kz`;
+    }
+
+    return new Intl.NumberFormat(
+      locale,
+      {
+        style: "currency",
+        currency,
+        minimumFractionDigits:
+          2,
+        maximumFractionDigits:
+          2,
+      }
+    ).format(
+      Number.isFinite(
+        amount
+      )
+        ? amount
+        : 0
+    );
   }
 
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(amount) ? amount : 0);
-}
-
-  function addToCart(stock: ProductStock) {
-    const product = stock.product;
+  function addToCart(
+    stock: ProductStock
+  ) {
+    const product =
+      stock.product;
 
     setError("");
     setMessage("");
 
-    setCart((prev) => {
-      const existing = prev.find((item) => item.productId === product.id);
+    setCart(
+      (prev) => {
+        const existing =
+          prev.find(
+            (item) =>
+              item.productId ===
+              product.id
+          );
 
-      if (existing) {
-        if (existing.quantity + 1 > stock.quantity) {
-          setError(t("quantityHigherThanStock"));
-          return prev;
+        if (
+          existing
+        ) {
+          if (
+            existing.quantity +
+              1 >
+            stock.quantity
+          ) {
+            setError(
+              t(
+                "quantityHigherThanStock"
+              )
+            );
+
+            return prev;
+          }
+
+          return prev.map(
+            (item) =>
+              item.productId ===
+              product.id
+                ? {
+                    ...item,
+                    quantity:
+                      item.quantity +
+                      1,
+                  }
+                : item
+          );
         }
 
-        return prev.map((item) =>
-          item.productId === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
+        return [
+          ...prev,
+          {
+            productId:
+              product.id,
 
-      return [
-        ...prev,
-        {
-          productId: product.id,
-          name: product.name,
-          code: product.internalCode,
-          unit: product.unit,
-          price: Number(product.salePrice || 0),
-          quantity: 1,
-          availableQuantity: stock.quantity,
-        },
-      ];
-    });
+            name:
+              product.name,
+
+            code:
+              product.internalCode,
+
+            unit:
+              product.unit,
+
+            price:
+              Number(
+                product.salePrice ||
+                  0
+              ),
+
+            quantity:
+              1,
+
+            availableQuantity:
+              stock.quantity,
+          },
+        ];
+      }
+    );
 
     setSearch("");
   }
 
-  function removeFromCart(productId: string) {
-    setCart((prev) => prev.filter((item) => item.productId !== productId));
-  }
-
-  function decreaseQuantity(productId: string) {
-    setCart((prev) =>
-      prev.map((item) =>
-        item.productId === productId
-          ? { ...item, quantity: Math.max(1, item.quantity - 1) }
-          : item
-      )
+  function removeFromCart(
+    productId: string
+  ) {
+    setCart(
+      (prev) =>
+        prev.filter(
+          (item) =>
+            item.productId !==
+            productId
+        )
     );
   }
 
-  function increaseQuantity(productId: string) {
-    setCart((prev) =>
-      prev.map((item) => {
-        if (item.productId !== productId) return item;
+  function decreaseQuantity(
+    productId: string
+  ) {
+    setCart(
+      (prev) =>
+        prev.map(
+          (item) =>
+            item.productId ===
+            productId
+              ? {
+                  ...item,
 
-        if (item.quantity + 1 > item.availableQuantity) {
-          setError(t("quantityHigherThanStock"));
-          return item;
-        }
-
-        return { ...item, quantity: item.quantity + 1 };
-      })
+                  quantity:
+                    Math.max(
+                      1,
+                      item.quantity -
+                        1
+                    ),
+                }
+              : item
+        )
     );
   }
 
-  function handleBarcodeEnter(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
+  function increaseQuantity(
+    productId: string
+  ) {
+    setCart(
+      (prev) =>
+        prev.map(
+          (item) => {
+            if (
+              item.productId !==
+              productId
+            ) {
+              return item;
+            }
 
-    const code = barcode.trim();
-    if (!code) return;
+            if (
+              item.quantity +
+                1 >
+              item.availableQuantity
+            ) {
+              setError(
+                t(
+                  "quantityHigherThanStock"
+                )
+              );
 
-    const found = products.find(
-      (item) =>
-        item.product.barcode === code || item.product.internalCode === code
+              return item;
+            }
+
+            return {
+              ...item,
+
+              quantity:
+                item.quantity +
+                1,
+            };
+          }
+        )
     );
+  }
 
-    if (!found) {
-      setError(t("productNotFoundCantina"));
+  function handleBarcodeEnter(
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) {
+    if (
+      e.key !==
+      "Enter"
+    ) {
       return;
     }
 
-    addToCart(found);
+    e.preventDefault();
+
+    const code =
+      barcode.trim();
+
+    if (!code) {
+      return;
+    }
+
+    const found =
+      products.find(
+        (item) =>
+          item.product
+            .barcode ===
+            code ||
+          item.product
+            .internalCode ===
+            code
+      );
+
+    if (!found) {
+      setError(
+        t(
+          "productNotFoundCantina"
+        )
+      );
+
+      return;
+    }
+
+    addToCart(
+      found
+    );
+
     setBarcode("");
   }
 
-  function addNumber(value: string) {
-    setPaidAmount((prev) => {
-      if (value === "." && prev.includes(".")) return prev;
-      return `${prev}${value}`;
-    });
+  function addNumber(
+    value: string
+  ) {
+    setPaidAmount(
+      (prev) => {
+        if (
+          value === "." &&
+          prev.includes(".")
+        ) {
+          return prev;
+        }
+
+        return `${prev}${value}`;
+      }
+    );
   }
 
   function cancelSale() {
     setCart([]);
+
     setPaidAmount("");
+
     setDiscount("");
+
     setCustomerName("");
-    setPaymentStep("none");
+
+    setPaymentStep(
+      "none"
+    );
+
     setError("");
+
     setMessage("");
   }
 
   function openPayment() {
-    if (role === "ADMIN" && !selectedCantinaId) {
-      setError(t("chooseCantinaBeforeSelling"));
+    if (
+      role === "ADMIN" &&
+      !selectedCantinaId
+    ) {
+      setError(
+        t(
+          "chooseCantinaBeforeSelling"
+        )
+      );
+
       return;
     }
 
-    if (cart.length === 0) {
-      setError(t("noItemAdded"));
+    if (
+      cart.length === 0
+    ) {
+      setError(
+        t(
+          "noItemAdded"
+        )
+      );
+
       return;
     }
 
     setError("");
-    setPaymentStep("method");
+
+    setPaymentStep(
+      "method"
+    );
   }
 
- function buildSalePayload(method: PaymentMethod) {
-  return {
-    cantinaId: selectedCantinaId,
+  function buildSalePayload(
+    method: PaymentMethod,
+    clientRequestId: string
+  ) {
+    return {
+      clientRequestId,
 
-    items: cart.map((item) => ({
-      productId: item.productId,
-      quantity: item.quantity,
-    })),
+      cantinaId:
+        selectedCantinaId,
 
-    paymentMethod: method,
+      items:
+        cart.map(
+          (item) => ({
+            productId:
+              item.productId,
 
-    paidAmount:
-      method === "CASH"
-        ? Number(paidAmount || 0)
-        : total,
+            quantity:
+              item.quantity,
+          })
+        ),
 
-    discountAmount: discountValue,
+      paymentMethod:
+        method,
 
-    customerName,
+      paidAmount:
+        method ===
+        "CASH"
+          ? Number(
+              paidAmount ||
+                0
+            )
+          : total,
 
-    customerTaxId: null,
+      discountAmount:
+        discountValue,
 
-    notes: null,
-  };
-};
-  async function submitSale(method: PaymentMethod) {
+      customerName,
+
+      customerTaxId:
+        null,
+
+      notes:
+        null,
+    };
+  }
+
+  async function submitSale(
+    method: PaymentMethod
+  ) {
+    if (
+      saleSubmissionLock.current
+    ) {
+      return;
+    }
+
+    saleSubmissionLock.current =
+      true;
+
     setSelling(true);
+
     setError("");
 
-    try {
-      const amountPaid = method === "CASH" ? Number(paidAmount || 0) : total;
+    const clientRequestId =
+      crypto.randomUUID();
 
-      if (method === "CASH" && amountPaid < total) {
-        setError("O valor pago é inferior ao total.");
+    const salePayload =
+      buildSalePayload(
+        method,
+        clientRequestId
+      );
+
+    try {
+      const amountPaid =
+        method === "CASH"
+          ? Number(
+              paidAmount ||
+                0
+            )
+          : total;
+
+      if (
+        method === "CASH" &&
+        amountPaid < total
+      ) {
+        setError(
+          "O valor pago é inferior ao total."
+        );
+
         return;
       }
 
-      const salePayload = buildSalePayload(method);
-
-      if (!navigator.onLine) {
-        const existing = JSON.parse(
-          localStorage.getItem("offline_sales") || "[]"
-        );
+      if (
+        !navigator.onLine
+      ) {
+        const existing =
+          JSON.parse(
+            localStorage.getItem(
+              "offline_sales"
+            ) || "[]"
+          );
 
         localStorage.setItem(
           "offline_sales",
+
           JSON.stringify([
             ...existing,
+
             {
-              id: crypto.randomUUID(),
-              createdAt: new Date().toISOString(),
-              payload: salePayload,
+              id:
+                clientRequestId,
+
+              createdAt:
+                new Date().toISOString(),
+
+              payload:
+                salePayload,
             },
           ])
         );
 
         cancelSale();
+
         setMessage(
-          t("offlineSaleSaved")
+          t(
+            "offlineSaleSaved"
+          )
         );
+
         return;
       }
 
-      const res = await fetch("/api/vendas", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(salePayload),
-      });
+      const res =
+        await fetch(
+          "/api/vendas",
+          {
+            method:
+              "POST",
 
-      const data = await res.json();
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                salePayload
+              ),
+          }
+        );
+
+      const data =
+        await res.json();
 
       if (!res.ok) {
-        setError(data.message || t("errorFinishingSale"));
+        setError(
+          data.message ||
+            t(
+              "errorFinishingSale"
+            )
+        );
+
         return;
       }
 
-      setLastSaleId(data.sale?.id || null);
-      setMessage(t("saleRegisteredSuccess"));
-      setPaymentStep("invoice");
-
-      await loadProducts(selectedCantinaId);
-    } catch {
-      const salePayload = buildSalePayload(method);
-      const existing = JSON.parse(localStorage.getItem("offline_sales") || "[]");
-
-      localStorage.setItem(
-        "offline_sales",
-        JSON.stringify([
-          ...existing,
-          {
-            id: crypto.randomUUID(),
-            createdAt: new Date().toISOString(),
-            payload: salePayload,
-          },
-        ])
+      setLastSaleId(
+        data.sale?.id ||
+          null
       );
 
-      cancelSale();
       setMessage(
-        t("offlineSaleSaved")
+        t(
+          "saleRegisteredSuccess"
+        )
+      );
+
+      setPaymentStep(
+        "invoice"
+      );
+
+      await loadProducts(
+        selectedCantinaId
+      );
+    } catch {
+      const existing =
+        JSON.parse(
+          localStorage.getItem(
+            "offline_sales"
+          ) || "[]"
+        );
+
+      const alreadyQueued =
+        existing.some(
+          (sale: {
+            id?: string;
+
+            payload?: {
+              clientRequestId?: string;
+            };
+          }) =>
+            sale.id ===
+              clientRequestId ||
+            sale.payload
+              ?.clientRequestId ===
+              clientRequestId
+        );
+
+      if (
+        !alreadyQueued
+      ) {
+        localStorage.setItem(
+          "offline_sales",
+
+          JSON.stringify([
+            ...existing,
+
+            {
+              id:
+                clientRequestId,
+
+              createdAt:
+                new Date().toISOString(),
+
+              payload:
+                salePayload,
+            },
+          ])
+        );
+      }
+
+      cancelSale();
+
+      setMessage(
+        t(
+          "offlineSaleSaved"
+        )
       );
     } finally {
       setSelling(false);
+
+      saleSubmissionLock.current =
+        false;
     }
   }
 
   async function syncOfflineSales() {
-    if (!navigator.onLine) return;
-
-    const saved = JSON.parse(localStorage.getItem("offline_sales") || "[]");
-    if (!saved.length) return;
-
-    const remaining = [];
-
-    for (const sale of saved) {
-      try {
-        const res = await fetch("/api/vendas", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(sale.payload),
-        });
-
-        if (!res.ok) remaining.push(sale);
-      } catch {
-        remaining.push(sale);
-      }
+    if (
+      !navigator.onLine
+    ) {
+      return;
     }
 
-    localStorage.setItem("offline_sales", JSON.stringify(remaining));
+    if (
+      offlineSyncLock.current
+    ) {
+      return;
+    }
 
-    if (remaining.length === 0) {
-      setMessage(t("offlineSalesSynced"));
-      await loadProducts(selectedCantinaId);
+    offlineSyncLock.current =
+      true;
+
+    try {
+      const saved =
+        JSON.parse(
+          localStorage.getItem(
+            "offline_sales"
+          ) || "[]"
+        );
+
+      if (
+        !saved.length
+      ) {
+        return;
+      }
+
+      const remaining =
+        [];
+
+      for (
+        const sale of saved
+      ) {
+        if (
+          !sale?.payload
+            ?.clientRequestId
+        ) {
+          remaining.push(
+            sale
+          );
+
+          continue;
+        }
+
+        try {
+          const res =
+            await fetch(
+              "/api/vendas",
+              {
+                method:
+                  "POST",
+
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                },
+
+                body:
+                  JSON.stringify(
+                    sale.payload
+                  ),
+              }
+            );
+
+          if (!res.ok) {
+            remaining.push(
+              sale
+            );
+          }
+        } catch {
+          remaining.push(
+            sale
+          );
+        }
+      }
+
+      localStorage.setItem(
+        "offline_sales",
+
+        JSON.stringify(
+          remaining
+        )
+      );
+
+      if (
+        remaining.length ===
+        0
+      ) {
+        setMessage(
+          t(
+            "offlineSalesSynced"
+          )
+        );
+
+        await loadProducts(
+          selectedCantinaId
+        );
+      }
+    } finally {
+      offlineSyncLock.current =
+        false;
     }
   }
 
   useEffect(() => {
-  const timeout = setTimeout(() => {
-    void syncOfflineSales();
-  }, 0);
+    const timeout =
+      setTimeout(() => {
+        void syncOfflineSales();
+      }, 0);
 
-  window.addEventListener("online", syncOfflineSales);
+    window.addEventListener(
+      "online",
+      syncOfflineSales
+    );
 
-  return () => {
-    clearTimeout(timeout);
-    window.removeEventListener("online", syncOfflineSales);
-  };
-}, [selectedCantinaId]);
+    return () => {
+      clearTimeout(
+        timeout
+      );
 
-  async function loadSalesReport(pageValue = 1) {
-    const params = new URLSearchParams();
+      window.removeEventListener(
+        "online",
+        syncOfflineSales
+      );
+    };
+  }, [
+    selectedCantinaId,
+  ]);
 
-    params.set("page", String(pageValue));
+  async function loadSalesReport(
+    pageValue = 1
+  ) {
+    const params =
+      new URLSearchParams();
 
-    if (reportStart) params.set("start", reportStart);
-    if (reportEnd) params.set("end", reportEnd);
-    if (selectedCantinaId) params.set("cantinaId", selectedCantinaId);
+    params.set(
+      "page",
+      String(
+        pageValue
+      )
+    );
 
-    const res = await fetch(`/api/vendas/history?${params.toString()}`);
-    const data = await res.json();
+    if (
+      reportStart
+    ) {
+      params.set(
+        "start",
+        reportStart
+      );
+    }
 
-    if (res.ok) {
-      setReportSales(data.sales || []);
-      setReportPage(data.page || 1);
-      setReportTotalPages(data.totalPages || 1);
+    if (
+      reportEnd
+    ) {
+      params.set(
+        "end",
+        reportEnd
+      );
+    }
+
+    if (
+      selectedCantinaId
+    ) {
+      params.set(
+        "cantinaId",
+        selectedCantinaId
+      );
+    }
+
+    const res =
+      await fetch(
+        `/api/vendas/history?${params.toString()}`
+      );
+
+    const data =
+      await res.json();
+
+    if (
+      res.ok
+    ) {
+      setReportSales(
+        data.sales ||
+          []
+      );
+
+      setReportPage(
+        data.page ||
+          1
+      );
+
+      setReportTotalPages(
+        data.totalPages ||
+          1
+      );
     }
   }
 
   function finishWithoutInvoice() {
     cancelSale();
-    setLastSaleId(null);
-    setMessage(t("saleFinishedWithoutInvoice"));
+
+    setLastSaleId(
+      null
+    );
+
+    setMessage(
+      t(
+        "saleFinishedWithoutInvoice"
+      )
+    );
   }
 
   function emitInvoice() {
-  if (!lastSaleId) {
-    alert(t("saleNotFoundForInvoice"));
-    return;
-  }
+    if (
+      !lastSaleId
+    ) {
+      alert(
+        t(
+          "saleNotFoundForInvoice"
+        )
+      );
 
-  router.push(`/facturas/${lastSaleId}`);
-}
+      return;
+    }
+
+    router.push(
+      `/facturas/${lastSaleId}`
+    );
+  }
 
   return (
     <div className="min-h-screen lg:h-screen overflow-auto lg:overflow-hidden bg-[#F4F7FA] p-3">
@@ -518,59 +1195,116 @@ export default function VendasClient() {
         <div className="bg-white rounded-[18px] px-4 py-2 shadow-sm border border-slate-100 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-[14px] bg-[#123A5C]/10 flex items-center justify-center">
-              <Store className="text-[#123A5C]" size={22} />
+              <Store
+                className="text-[#123A5C]"
+                size={22}
+              />
             </div>
 
             <div>
               <h1 className="text-lg font-bold text-slate-800">
-                {t("salesManagement")}
+                {t(
+                  "salesManagement"
+                )}
               </h1>
+
               <p className="text-[11px] text-slate-500">
-                {t("posConnectedToStock")}
+                {t(
+                  "posConnectedToStock"
+                )}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {role === "ADMIN" && (
+            {role ===
+              "ADMIN" && (
               <select
-                value={selectedCantinaId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setSelectedCantinaId(id);
+                value={
+                  selectedCantinaId
+                }
+                onChange={(
+                  e
+                ) => {
+                  const id =
+                    e.target
+                      .value;
+
+                  setSelectedCantinaId(
+                    id
+                  );
+
                   cancelSale();
+
                   setSearch("");
+
                   setBarcode("");
-                  void loadProducts(id);
+
+                  void loadProducts(
+                    id
+                  );
                 }}
                 className="h-9 rounded-[12px] border px-3 text-xs text-[#123A5C] font-semibold bg-white"
               >
-                <option value="">{t("chooseCantina")}</option>
-                {cantinas.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} — {c.code}
-                  </option>
-                ))}
+                <option value="">
+                  {t(
+                    "chooseCantina"
+                  )}
+                </option>
+
+                {cantinas.map(
+                  (c) => (
+                    <option
+                      key={
+                        c.id
+                      }
+                      value={
+                        c.id
+                      }
+                    >
+                      {
+                        c.name
+                      }{" "}
+                      —{" "}
+                      {
+                        c.code
+                      }
+                    </option>
+                  )
+                )}
               </select>
             )}
 
             {cantina && (
               <div className="h-9 rounded-[12px] bg-[#123A5C] text-white px-3 flex flex-col justify-center">
                 <p className="text-xs font-bold leading-tight">
-                  {cantina.name}
+                  {
+                    cantina.name
+                  }
                 </p>
+
                 <p className="text-[10px] text-white/70 leading-tight">
-                  Código {cantina.code}
+                  Código{" "}
+                  {
+                    cantina.code
+                  }
                 </p>
               </div>
             )}
 
             <button
-              onClick={cancelSale}
+              onClick={
+                cancelSale
+              }
               className="h-9 rounded-[12px] bg-green-600 px-4 text-white text-xs font-bold flex items-center gap-2 hover:bg-green-700"
             >
-              <Plus size={15} />
-              {t("newSale")}
+              <Plus
+                size={15}
+              />
+
+              {t(
+                "newSale"
+              )}
             </button>
           </div>
         </div>
@@ -586,10 +1320,24 @@ export default function VendasClient() {
                   />
 
                   <input
-                    value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
-                    onKeyDown={handleBarcodeEnter}
-                    placeholder={t("codeOrBarcode")}
+                    value={
+                      barcode
+                    }
+                    onChange={(
+                      e
+                    ) =>
+                      setBarcode(
+                        e
+                          .target
+                          .value
+                      )
+                    }
+                    onKeyDown={
+                      handleBarcodeEnter
+                    }
+                    placeholder={t(
+                      "codeOrBarcode"
+                    )}
                     className="h-9 w-full rounded-[12px] border pl-9 pr-3 text-xs font-semibold"
                   />
                 </div>
@@ -601,61 +1349,125 @@ export default function VendasClient() {
                   />
 
                   <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder={t("searchProduct")}
+                    value={
+                      search
+                    }
+                    onChange={(
+                      e
+                    ) =>
+                      setSearch(
+                        e
+                          .target
+                          .value
+                      )
+                    }
+                    placeholder={t(
+                      "searchProduct"
+                    )}
                     className="h-9 w-full rounded-[12px] border pl-9 pr-3 text-xs font-semibold"
                   />
 
-                  {search.trim() && filteredProducts.length > 0 && (
-                    <div className="absolute left-0 right-0 top-10 z-50 rounded-[14px] border bg-white shadow-xl max-h-72 overflow-auto">
-                      {filteredProducts.map((stock) => (
-                        <button
-                          key={stock.id}
-                          onClick={() => addToCart(stock)}
-                          className="w-full px-4 py-3 text-left hover:bg-slate-50 border-b last:border-b-0"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-bold text-slate-800">
-                                {stock.product.name}
-                              </p>
+                  {search.trim() &&
+                    filteredProducts.length >
+                      0 && (
+                      <div className="absolute left-0 right-0 top-10 z-50 rounded-[14px] border bg-white shadow-xl max-h-72 overflow-auto">
+                        {filteredProducts.map(
+                          (
+                            stock
+                          ) => (
+                            <button
+                              key={
+                                stock.id
+                              }
+                              onClick={() =>
+                                addToCart(
+                                  stock
+                                )
+                              }
+                              className="w-full px-4 py-3 text-left hover:bg-slate-50 border-b last:border-b-0"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-800">
+                                    {
+                                      stock
+                                        .product
+                                        .name
+                                    }
+                                  </p>
 
-                              <p className="text-xs text-slate-500">
-                                {stock.product.internalCode} · Stock:{" "}
-                                {stock.quantity}
-                              </p>
-                            </div>
+                                  <p className="text-xs text-slate-500">
+                                    {
+                                      stock
+                                        .product
+                                        .internalCode
+                                    }{" "}
+                                    ·
+                                    Stock:{" "}
+                                    {
+                                      stock.quantity
+                                    }
+                                  </p>
+                                </div>
 
-                            <p className="text-sm font-bold text-[#123A5C]">
-                              {formatMoney(stock.product.salePrice)}
-                            </p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                                <p className="text-sm font-bold text-[#123A5C]">
+                                  {formatMoney(
+                                    stock
+                                      .product
+                                      .salePrice
+                                  )}
+                                </p>
+                              </div>
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
                 </div>
 
-                {role === "ADMIN" && (
+                {role ===
+                  "ADMIN" && (
                   <button
-                    onClick={() => router.push("/Dashboard")}
+                    onClick={() =>
+                      router.push(
+                        "/Dashboard"
+                      )
+                    }
                     className="h-9 rounded-[12px] border px-3 text-xs font-bold flex items-center justify-center gap-2 bg-white text-[#123A5C] hover:bg-slate-50"
                   >
-                    <ArrowLeft size={14} />
-                    {t("back")}
+                    <ArrowLeft
+                      size={
+                        14
+                      }
+                    />
+
+                    {t(
+                      "back"
+                    )}
                   </button>
                 )}
 
                 <button
                   onClick={() => {
-                    setReportOpen(true);
-                    void loadSalesReport(1);
+                    setReportOpen(
+                      true
+                    );
+
+                    void loadSalesReport(
+                      1
+                    );
                   }}
                   className="h-9 rounded-[12px] bg-[#123A5C] px-3 text-white text-xs font-bold flex items-center justify-center gap-2"
                 >
-                  <FileText size={14} />
-                  {t("report")}
+                  <FileText
+                    size={
+                      14
+                    }
+                  />
+
+                  {t(
+                    "report"
+                  )}
                 </button>
               </div>
             </div>
@@ -663,27 +1475,54 @@ export default function VendasClient() {
             <div className="bg-white rounded-[18px] shadow-sm border border-slate-100 overflow-hidden min-h-[420px] lg:min-h-0 flex flex-col">
               <div className="px-4 py-2 bg-[#123A5C] text-white flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <ShoppingCart size={17} />
-                  <h2 className="font-bold text-sm">{t("currentSale")}</h2>
+                  <ShoppingCart
+                    size={
+                      17
+                    }
+                  />
+
+                  <h2 className="font-bold text-sm">
+                    {t(
+                      "currentSale"
+                    )}
+                  </h2>
                 </div>
 
                 <p className="text-xs text-white/80">
-                  {t("items")}: <strong>{totalItems}</strong>
+                  {t(
+                    "items"
+                  )}
+                  :{" "}
+                  <strong>
+                    {
+                      totalItems
+                    }
+                  </strong>
                 </p>
               </div>
 
-              {(error || message) && (
+              {(error ||
+                message) && (
                 <div className="px-4 pt-3">
                   {error && (
                     <div className="rounded-[12px] bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600">
-                      {error}
+                      {
+                        error
+                      }
                     </div>
                   )}
 
                   {message && (
                     <div className="rounded-[12px] bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700 flex items-center gap-2">
-                      <CheckCircle2 size={15} />
-                      {message}
+                      <CheckCircle2
+                        size={
+                          15
+                        }
+                      />
+
+                      {
+                        message
+                      }
                     </div>
                   )}
                 </div>
@@ -694,19 +1533,27 @@ export default function VendasClient() {
                   <thead className="bg-slate-50 text-slate-500 sticky top-0">
                     <tr>
                       <th className="px-4 py-3 text-left">
-                        {t("product")}
+                        {t(
+                          "product"
+                        )}
                       </th>
 
                       <th className="px-4 py-3 text-right">
-                        {t("price")}
+                        {t(
+                          "price"
+                        )}
                       </th>
 
                       <th className="px-4 py-3 text-center">
-                        {t("quantity")}
+                        {t(
+                          "quantity"
+                        )}
                       </th>
 
                       <th className="px-4 py-3 text-right">
-                        {t("total")}
+                        {t(
+                          "total"
+                        )}
                       </th>
 
                       <th className="px-4 py-3"></th>
@@ -714,77 +1561,117 @@ export default function VendasClient() {
                   </thead>
 
                   <tbody className="divide-y divide-slate-100">
-                    {cart.length === 0 ? (
+                    {cart.length ===
+                    0 ? (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={
+                            5
+                          }
                           className="py-24 text-center text-slate-500"
                         >
-                          {t("noItemsAdded")}
+                          {t(
+                            "noItemsAdded"
+                          )}
                         </td>
                       </tr>
                     ) : (
-                      cart.map((item) => (
-                        <tr
-                          key={item.productId}
-                          className="hover:bg-slate-50"
-                        >
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-slate-800">
-                              {item.name}
-                            </p>
+                      cart.map(
+                        (
+                          item
+                        ) => (
+                          <tr
+                            key={
+                              item.productId
+                            }
+                            className="hover:bg-slate-50"
+                          >
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-slate-800">
+                                {
+                                  item.name
+                                }
+                              </p>
 
-                            <p className="text-xs text-slate-500">
-                              {item.code}
-                            </p>
-                          </td>
+                              <p className="text-xs text-slate-500">
+                                {
+                                  item.code
+                                }
+                              </p>
+                            </td>
 
-                          <td className="px-4 py-3 text-right">
-                            {formatMoney(item.price)}
-                          </td>
+                            <td className="px-4 py-3 text-right">
+                              {formatMoney(
+                                item.price
+                              )}
+                            </td>
 
-                          <td className="px-4 py-3">
-                            <div className="flex justify-center items-center gap-2">
+                            <td className="px-4 py-3">
+                              <div className="flex justify-center items-center gap-2">
+                                <button
+                                  onClick={() =>
+                                    decreaseQuantity(
+                                      item.productId
+                                    )
+                                  }
+                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                                >
+                                  <Minus
+                                    size={
+                                      14
+                                    }
+                                  />
+                                </button>
+
+                                <span className="w-8 text-center font-bold">
+                                  {
+                                    item.quantity
+                                  }
+                                </span>
+
+                                <button
+                                  onClick={() =>
+                                    increaseQuantity(
+                                      item.productId
+                                    )
+                                  }
+                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                                >
+                                  <Plus
+                                    size={
+                                      14
+                                    }
+                                  />
+                                </button>
+                              </div>
+                            </td>
+
+                            <td className="px-4 py-3 text-right font-bold text-[#123A5C]">
+                              {formatMoney(
+                                item.quantity *
+                                  item.price
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3 text-right">
                               <button
                                 onClick={() =>
-                                  decreaseQuantity(item.productId)
+                                  removeFromCart(
+                                    item.productId
+                                  )
                                 }
-                                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                                className="text-red-600 p-2 hover:bg-red-50 rounded-xl"
                               >
-                                <Minus size={14} />
+                                <Trash2
+                                  size={
+                                    16
+                                  }
+                                />
                               </button>
-
-                              <span className="w-8 text-center font-bold">
-                                {item.quantity}
-                              </span>
-
-                              <button
-                                onClick={() =>
-                                  increaseQuantity(item.productId)
-                                }
-                                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
-                              >
-                                <Plus size={14} />
-                              </button>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3 text-right font-bold text-[#123A5C]">
-                            {formatMoney(item.quantity * item.price)}
-                          </td>
-
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() =>
-                                removeFromCart(item.productId)
-                              }
-                              className="text-red-600 p-2 hover:bg-red-50 rounded-xl"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                          </tr>
+                        )
+                      )
                     )}
                   </tbody>
                 </table>
@@ -792,47 +1679,91 @@ export default function VendasClient() {
 
               <div className="border-t bg-slate-50 px-4 py-3 flex justify-between items-center">
                 <p className="text-sm text-slate-500">
-                  {t("subtotal")}:{" "}
-                  <strong>{formatMoney(subtotal)}</strong>
+                  {t(
+                    "subtotal"
+                  )}
+                  :{" "}
+                  <strong>
+                    {formatMoney(
+                      subtotal
+                    )}
+                  </strong>
                 </p>
 
                 <p className="text-2xl font-black text-[#123A5C]">
-                  {formatMoney(total)}
+                  {formatMoney(
+                    total
+                  )}
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <button
-                onClick={openPayment}
-                disabled={cart.length === 0 || selling}
+                onClick={
+                  openPayment
+                }
+                disabled={
+                  cart.length ===
+                    0 ||
+                  selling
+                }
                 className="bg-green-600 text-white rounded-[16px] px-4 py-4 font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <ArrowRight size={20} />
-                {t("continueSale")}
+                <ArrowRight
+                  size={
+                    20
+                  }
+                />
+
+                {t(
+                  "continueSale"
+                )}
               </button>
 
               <button
-                disabled={selling}
+                disabled={
+                  selling
+                }
                 onClick={() => {
-                  if (cart.length > 0) {
+                  if (
+                    cart.length >
+                    0
+                  ) {
                     removeFromCart(
-                      cart[cart.length - 1].productId
+                      cart[
+                        cart.length -
+                          1
+                      ]
+                        .productId
                     );
                   }
                 }}
                 className="bg-yellow-300 text-black rounded-[16px] px-4 py-4 font-bold flex items-center justify-center disabled:opacity-50"
               >
-                {t("removeItem")}
+                {t(
+                  "removeItem"
+                )}
               </button>
 
               <button
-                disabled={selling}
-                onClick={cancelSale}
+                disabled={
+                  selling
+                }
+                onClick={
+                  cancelSale
+                }
                 className="bg-red-500 text-white rounded-[16px] px-4 py-4 font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <XCircle size={18} />
-                {t("cancel")}
+                <XCircle
+                  size={
+                    18
+                  }
+                />
+
+                {t(
+                  "cancel"
+                )}
               </button>
             </div>
           </section>
@@ -840,34 +1771,56 @@ export default function VendasClient() {
           <aside className="min-h-0 bg-white rounded-[18px] shadow-sm border border-slate-100 overflow-hidden flex flex-col">
             <div className="bg-[#123A5C] text-white px-4 py-3">
               <h2 className="font-bold text-base">
-                {t("saleSummary")}
+                {t(
+                  "saleSummary"
+                )}
               </h2>
 
               <p className="text-[11px] text-white/70">
-                {t("totalDiscountCustomer")}
+                {t(
+                  "totalDiscountCustomer"
+                )}
               </p>
             </div>
 
             <div className="p-4 flex-1 grid grid-rows-[auto_auto_auto_1fr] gap-3">
               <div className="rounded-[18px] bg-green-50 border border-green-100 p-4 text-center">
                 <p className="text-xs text-green-700 font-semibold">
-                  {t("total")}
+                  {t(
+                    "total"
+                  )}
                 </p>
 
                 <p className="text-3xl font-black text-green-700">
-                  {formatMoney(total)}
+                  {formatMoney(
+                    total
+                  )}
                 </p>
               </div>
 
               <div>
                 <label className="text-xs text-slate-500">
-                  {t("discount")}
+                  {t(
+                    "discount"
+                  )}
                 </label>
 
                 <input
-                  value={discount}
-                  disabled={selling}
-                  onChange={(e) => setDiscount(e.target.value)}
+                  value={
+                    discount
+                  }
+                  disabled={
+                    selling
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    setDiscount(
+                      e
+                        .target
+                        .value
+                    )
+                  }
                   className="mt-1 h-11 w-full rounded-[14px] border px-3 text-right text-sm font-bold disabled:opacity-50"
                   placeholder="0"
                 />
@@ -875,15 +1828,29 @@ export default function VendasClient() {
 
               <div>
                 <label className="text-xs text-slate-500">
-                  {t("customerName")}
+                  {t(
+                    "customerName"
+                  )}
                 </label>
 
                 <input
-                  placeholder={t("customerName")}
-                  value={customerName}
-                  disabled={selling}
-                  onChange={(e) =>
-                    setCustomerName(e.target.value)
+                  placeholder={t(
+                    "customerName"
+                  )}
+                  value={
+                    customerName
+                  }
+                  disabled={
+                    selling
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    setCustomerName(
+                      e
+                        .target
+                        .value
+                    )
                   }
                   className="mt-1 h-11 w-full border rounded-[14px] px-3 text-sm disabled:opacity-50"
                 />
@@ -891,19 +1858,27 @@ export default function VendasClient() {
 
               <div className="rounded-[18px] bg-slate-50 border p-4">
                 <p className="text-sm text-slate-500">
-                  {t("items")}
+                  {t(
+                    "items"
+                  )}
                 </p>
 
                 <p className="text-2xl font-black text-[#123A5C]">
-                  {totalItems}
+                  {
+                    totalItems
+                  }
                 </p>
 
                 <p className="text-sm text-slate-500 mt-4">
-                  {t("subtotal")}
+                  {t(
+                    "subtotal"
+                  )}
                 </p>
 
                 <p className="text-xl font-bold text-slate-800">
-                  {formatMoney(subtotal)}
+                  {formatMoney(
+                    subtotal
+                  )}
                 </p>
               </div>
             </div>
@@ -911,104 +1886,208 @@ export default function VendasClient() {
         </div>
       </div>
 
-      {paymentStep === "method" && (
+      {paymentStep ===
+        "method" && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6">
           <div className="bg-white rounded-[24px] shadow-xl w-full max-w-3xl p-6">
             <h2 className="text-2xl font-bold text-slate-800">
-              {t("choosePaymentMethod")}
+              {t(
+                "choosePaymentMethod"
+              )}
             </h2>
 
             <p className="text-slate-500 mt-1">
-              {t("saleTotal")}:{" "}
-              <strong>{formatMoney(total)}</strong>
+              {t(
+                "saleTotal"
+              )}
+              :{" "}
+              <strong>
+                {formatMoney(
+                  total
+                )}
+              </strong>
             </p>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
               <PaymentButton
-                title={t("cash")}
-                icon={<Banknote size={28} />}
-                disabled={selling}
+                title={t(
+                  "cash"
+                )}
+                icon={
+                  <Banknote
+                    size={
+                      28
+                    }
+                  />
+                }
+                disabled={
+                  selling
+                }
                 onClick={() => {
-                  setPaymentMethod("CASH");
-                  setPaymentStep("cash");
+                  setPaymentMethod(
+                    "CASH"
+                  );
+
+                  setPaymentStep(
+                    "cash"
+                  );
                 }}
               />
 
               <PaymentButton
-                title={t("card")}
-                icon={<CreditCard size={28} />}
-                disabled={selling}
+                title={t(
+                  "card"
+                )}
+                icon={
+                  <CreditCard
+                    size={
+                      28
+                    }
+                  />
+                }
+                disabled={
+                  selling
+                }
                 onClick={() => {
-                  setPaymentMethod("CARD");
-                  setPaidAmount(String(total));
-                  void submitSale("CARD");
+                  setPaymentMethod(
+                    "CARD"
+                  );
+
+                  setPaidAmount(
+                    String(
+                      total
+                    )
+                  );
+
+                  void submitSale(
+                    "CARD"
+                  );
                 }}
               />
 
               <PaymentButton
-                title={t("mobileMoney")}
-                icon={<Smartphone size={28} />}
-                disabled={selling}
+                title={t(
+                  "mobileMoney"
+                )}
+                icon={
+                  <Smartphone
+                    size={
+                      28
+                    }
+                  />
+                }
+                disabled={
+                  selling
+                }
                 onClick={() => {
-                  setPaymentMethod("MOBILE_MONEY");
-                  setPaidAmount(String(total));
-                  void submitSale("MOBILE_MONEY");
+                  setPaymentMethod(
+                    "MOBILE_MONEY"
+                  );
+
+                  setPaidAmount(
+                    String(
+                      total
+                    )
+                  );
+
+                  void submitSale(
+                    "MOBILE_MONEY"
+                  );
                 }}
               />
 
               <PaymentButton
-                title={t("transfer")}
-                icon={<ReceiptText size={28} />}
-                disabled={selling}
+                title={t(
+                  "transfer"
+                )}
+                icon={
+                  <ReceiptText
+                    size={
+                      28
+                    }
+                  />
+                }
+                disabled={
+                  selling
+                }
                 onClick={() => {
-                  setPaymentMethod("TRANSFER");
-                  setPaidAmount(String(total));
-                  void submitSale("TRANSFER");
+                  setPaymentMethod(
+                    "TRANSFER"
+                  );
+
+                  setPaidAmount(
+                    String(
+                      total
+                    )
+                  );
+
+                  void submitSale(
+                    "TRANSFER"
+                  );
                 }}
               />
             </div>
 
             <div className="flex justify-end mt-6">
               <button
-                disabled={selling}
-                onClick={() => setPaymentStep("none")}
+                disabled={
+                  selling
+                }
+                onClick={() =>
+                  setPaymentStep(
+                    "none"
+                  )
+                }
                 className="px-5 py-3 rounded-[16px] border font-semibold disabled:opacity-50"
               >
-                {t("back")}
+                {t(
+                  "back"
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {paymentStep === "cash" && (
+      {paymentStep ===
+        "cash" && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6">
           <div className="bg-white rounded-[24px] shadow-xl w-full max-w-4xl p-6">
             <div className="flex justify-between items-start">
               <div>
                 <h2 className="text-2xl font-bold text-slate-800">
-                  {t("cashPayment")}
+                  {t(
+                    "cashPayment"
+                  )}
                 </h2>
 
                 <p className="text-slate-500 mt-1">
-                  {t("enterReceivedAmount")}
+                  {t(
+                    "enterReceivedAmount"
+                  )}
                 </p>
               </div>
 
               <div className="text-right">
                 <p className="text-sm text-slate-500">
-                  {t("total")}
+                  {t(
+                    "total"
+                  )}
                 </p>
 
                 <p className="text-3xl font-black text-green-700">
-                  {formatMoney(total)}
+                  {formatMoney(
+                    total
+                  )}
                 </p>
               </div>
             </div>
 
             {error && (
               <div className="mt-4 rounded-[14px] bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
-                {error}
+                {
+                  error
+                }
               </div>
             )}
 
@@ -1016,14 +2095,26 @@ export default function VendasClient() {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm text-slate-500">
-                    {t("customerPays")}
+                    {t(
+                      "customerPays"
+                    )}
                   </label>
 
                   <input
-                    value={paidAmount}
-                    disabled={selling}
-                    onChange={(e) =>
-                      setPaidAmount(e.target.value)
+                    value={
+                      paidAmount
+                    }
+                    disabled={
+                      selling
+                    }
+                    onChange={(
+                      e
+                    ) =>
+                      setPaidAmount(
+                        e
+                          .target
+                          .value
+                      )
                     }
                     className="mt-1 h-14 w-full rounded-[16px] border px-4 text-right text-2xl font-black disabled:opacity-50"
                     placeholder="0"
@@ -1032,41 +2123,60 @@ export default function VendasClient() {
 
                 <div>
                   <label className="text-sm text-slate-500">
-                    {t("change")}
+                    {t(
+                      "change"
+                    )}
                   </label>
 
                   <div
                     className={`mt-1 h-14 w-full rounded-[16px] border px-4 flex items-center justify-end text-2xl font-black ${
-                      change < 0
+                      change <
+                      0
                         ? "text-red-600"
                         : "text-green-700"
                     }`}
                   >
-                    {formatMoney(change)}
+                    {formatMoney(
+                      change
+                    )}
                   </div>
                 </div>
 
                 <div className="flex gap-3">
                   <button
-                    disabled={selling}
+                    disabled={
+                      selling
+                    }
                     onClick={() =>
-                      setPaymentStep("method")
+                      setPaymentStep(
+                        "method"
+                      )
                     }
                     className="px-5 py-3 rounded-[16px] border font-semibold disabled:opacity-50"
                   >
-                    {t("back")}
+                    {t(
+                      "back"
+                    )}
                   </button>
 
                   <button
                     onClick={() =>
-                      submitSale("CASH")
+                      submitSale(
+                        "CASH"
+                      )
                     }
-                    disabled={selling}
+                    disabled={
+                      selling
+                    }
                     className="flex-1 px-5 py-3 rounded-[16px] bg-green-600 text-white font-bold disabled:opacity-50"
                   >
                     {selling
-                      ? t("validating")
-                      : t("validatePayment")}
+                      ? t(
+                          "validating"
+                        )
+                      : t(
+                          "validatePayment"
+                        )}
                   </button>
                 </div>
               </div>
@@ -1084,20 +2194,40 @@ export default function VendasClient() {
                   "9",
                   ".",
                   "0",
-                ].map((key) => (
-                  <button
-                    key={key}
-                    disabled={selling}
-                    onClick={() => addNumber(key)}
-                    className="h-16 rounded-[16px] bg-slate-100 font-bold text-2xl hover:bg-slate-200 disabled:opacity-50"
-                  >
-                    {key}
-                  </button>
-                ))}
+                ].map(
+                  (
+                    key
+                  ) => (
+                    <button
+                      key={
+                        key
+                      }
+                      disabled={
+                        selling
+                      }
+                      onClick={() =>
+                        addNumber(
+                          key
+                        )
+                      }
+                      className="h-16 rounded-[16px] bg-slate-100 font-bold text-2xl hover:bg-slate-200 disabled:opacity-50"
+                    >
+                      {
+                        key
+                      }
+                    </button>
+                  )
+                )}
 
                 <button
-                  disabled={selling}
-                  onClick={() => setPaidAmount("")}
+                  disabled={
+                    selling
+                  }
+                  onClick={() =>
+                    setPaidAmount(
+                      ""
+                    )
+                  }
                   className="h-16 rounded-[16px] bg-red-50 text-red-600 font-bold text-xl disabled:opacity-50"
                 >
                   C
@@ -1108,38 +2238,58 @@ export default function VendasClient() {
         </div>
       )}
 
-      {paymentStep === "invoice" && (
+      {paymentStep ===
+        "invoice" && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6">
           <div className="bg-white rounded-[24px] shadow-xl w-full max-w-xl p-6 text-center">
             <div className="mx-auto w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mb-4">
               <CheckCircle2
                 className="text-green-600"
-                size={34}
+                size={
+                  34
+                }
               />
             </div>
 
             <h2 className="text-2xl font-bold text-slate-800">
-              {t("saleCompleted")}
+              {t(
+                "saleCompleted"
+              )}
             </h2>
 
             <p className="text-slate-500 mt-2">
-              {t("doYouWantToEmitInvoice")}
+              {t(
+                "doYouWantToEmitInvoice"
+              )}
             </p>
 
             <div className="grid grid-cols-2 gap-3 mt-6">
               <button
-                onClick={finishWithoutInvoice}
+                onClick={
+                  finishWithoutInvoice
+                }
                 className="px-5 py-4 rounded-[16px] border font-semibold"
               >
-                {t("doNotEmit")}
+                {t(
+                  "doNotEmit"
+                )}
               </button>
 
               <button
-                onClick={emitInvoice}
+                onClick={
+                  emitInvoice
+                }
                 className="px-5 py-4 rounded-[16px] bg-[#123A5C] text-white font-bold flex items-center justify-center gap-2"
               >
-                <Printer size={18} />
-                {t("emitInvoice")}
+                <Printer
+                  size={
+                    18
+                  }
+                />
+
+                {t(
+                  "emitInvoice"
+                )}
               </button>
             </div>
           </div>
@@ -1151,45 +2301,71 @@ export default function VendasClient() {
           <div className="bg-white rounded-[24px] shadow-xl w-full max-w-5xl p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-slate-800">
-                {t("salesHistory")}
+                {t(
+                  "salesHistory"
+                )}
               </h2>
 
               <button
                 onClick={() =>
-                  setReportOpen(false)
+                  setReportOpen(
+                    false
+                  )
                 }
                 className="rounded-xl px-4 py-2 border"
               >
-                {t("close")}
+                {t(
+                  "close"
+                )}
               </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5">
               <input
                 type="date"
-                value={reportStart}
-                onChange={(e) =>
-                  setReportStart(e.target.value)
+                value={
+                  reportStart
+                }
+                onChange={(
+                  e
+                ) =>
+                  setReportStart(
+                    e
+                      .target
+                      .value
+                  )
                 }
                 className="border rounded-[14px] px-4 py-3 text-sm"
               />
 
               <input
                 type="date"
-                value={reportEnd}
-                onChange={(e) =>
-                  setReportEnd(e.target.value)
+                value={
+                  reportEnd
+                }
+                onChange={(
+                  e
+                ) =>
+                  setReportEnd(
+                    e
+                      .target
+                      .value
+                  )
                 }
                 className="border rounded-[14px] px-4 py-3 text-sm"
               />
 
               <button
                 onClick={() =>
-                  loadSalesReport(1)
+                  loadSalesReport(
+                    1
+                  )
                 }
                 className="rounded-[14px] bg-[#123A5C] text-white font-bold"
               >
-                {t("search")}
+                {t(
+                  "search"
+                )}
               </button>
             </div>
 
@@ -1198,86 +2374,118 @@ export default function VendasClient() {
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
                     <th className="px-4 py-3 text-left">
-                      {t("date")}
+                      {t(
+                        "date"
+                      )}
                     </th>
 
                     <th className="px-4 py-3 text-left">
-                      {t("saleNumber")}
+                      {t(
+                        "saleNumber"
+                      )}
                     </th>
 
                     <th className="px-4 py-3 text-left">
-                      {t("payment")}
+                      {t(
+                        "payment"
+                      )}
                     </th>
 
                     <th className="px-4 py-3 text-right">
-                      {t("total")}
+                      {t(
+                        "total"
+                      )}
                     </th>
 
                     <th className="px-4 py-3 text-center">
-                      {t("items")}
+                      {t(
+                        "items"
+                      )}
                     </th>
 
                     <th className="px-4 py-3 text-center">
-                      {t("details")}
+                      {t(
+                        "details"
+                      )}
                     </th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y">
-                  {reportSales.length === 0 ? (
+                  {reportSales.length ===
+                  0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={
+                          6
+                        }
                         className="py-10 text-center text-slate-500"
                       >
-                        {t("noSalesFound")}
+                        {t(
+                          "noSalesFound"
+                        )}
                       </td>
                     </tr>
                   ) : (
-                    reportSales.map((sale) => (
-                      <tr key={sale.id}>
-                        <td className="px-4 py-3">
-                          {new Date(
-                            sale.createdAt
-                          ).toLocaleString(
-                            "pt-PT"
-                          )}
-                        </td>
+                    reportSales.map(
+                      (
+                        sale
+                      ) => (
+                        <tr
+                          key={
+                            sale.id
+                          }
+                        >
+                          <td className="px-4 py-3">
+                            {new Date(
+                              sale.createdAt
+                            ).toLocaleString(
+                              "pt-PT"
+                            )}
+                          </td>
 
-                        <td className="px-4 py-3">
-                          {sale.saleNumber}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {sale.paymentMethod}
-                        </td>
-
-                        <td className="px-4 py-3 text-right font-bold">
-                          {formatMoney(
-                            sale.totalAmount
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3 text-center">
-                          {sale.items?.length ||
-                            0}
-                        </td>
-
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              router.push(
-                                `/facturas/${sale.id}`
-                              )
+                          <td className="px-4 py-3">
+                            {
+                              sale.saleNumber
                             }
-                            className="rounded-xl bg-[#123A5C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0B2540]"
-                          >
-                            {t("view")}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {
+                              sale.paymentMethod
+                            }
+                          </td>
+
+                          <td className="px-4 py-3 text-right font-bold">
+                            {formatMoney(
+                              sale.totalAmount
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3 text-center">
+                            {sale.items
+                              ?.length ||
+                              0}
+                          </td>
+
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                router.push(
+                                  `/facturas/${sale.id}`
+                                )
+                              }
+                              className="rounded-xl bg-[#123A5C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0B2540]"
+                            >
+                              {t(
+                                "view"
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    )
                   )}
                 </tbody>
               </table>
@@ -1285,24 +2493,37 @@ export default function VendasClient() {
 
             <div className="flex justify-between items-center mt-4">
               <p className="text-sm text-slate-500">
-                {t("page")} {reportPage}{" "}
-                {t("of")}{" "}
-                {reportTotalPages}
+                {t(
+                  "page"
+                )}{" "}
+                {
+                  reportPage
+                }{" "}
+                {t(
+                  "of"
+                )}{" "}
+                {
+                  reportTotalPages
+                }
               </p>
 
               <div className="flex gap-2">
                 <button
                   disabled={
-                    reportPage === 1
+                    reportPage ===
+                    1
                   }
                   onClick={() =>
                     loadSalesReport(
-                      reportPage - 1
+                      reportPage -
+                        1
                     )
                   }
                   className="px-4 py-2 rounded-xl border disabled:opacity-40"
                 >
-                  {t("previous")}
+                  {t(
+                    "previous"
+                  )}
                 </button>
 
                 <button
@@ -1312,12 +2533,15 @@ export default function VendasClient() {
                   }
                   onClick={() =>
                     loadSalesReport(
-                      reportPage + 1
+                      reportPage +
+                        1
                     )
                   }
                   className="px-4 py-2 rounded-xl border disabled:opacity-40"
                 >
-                  {t("next")}
+                  {t(
+                    "next"
+                  )}
                 </button>
               </div>
             </div>
